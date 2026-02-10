@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=240, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AI Chat</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :root {
+    --bg: #1a1a1a;
+    --surface: #242424;
+    --surface2: #2e2e2e;
+    --accent-openai: #10a37f;
+    --accent-anthropic: #d4a574;
+    --text: #e8e8e8;
+    --text-dim: #888;
+    --text-dark: #555;
+    --user-bubble: #333;
+    --radius: 8px;
+  }
+
+  html, body {
+    width: 240px;
+    height: 282px;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+
+  /* ===== SCREENS ===== */
+  .screen {
+    display: none;
+    width: 240px;
+    height: 282px;
+    flex-direction: column;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  .screen.active {
+    display: flex;
+  }
+
+  /* ===== HEADER ===== */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--surface2);
+    min-height: 28px;
+    flex-shrink: 0;
+  }
+  .header-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .header-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 2px 4px;
+    cursor: pointer;
+  }
+  .header-btn:active {
+    color: var(--text);
+  }
+
+  /* ===== MODEL INDICATOR ===== */
+  .model-indicator {
+    font-size: 8px;
+    padding: 1px 5px;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .model-indicator.openai {
+    background: var(--accent-openai);
+    color: #000;
+  }
+  .model-indicator.anthropic {
+    background: var(--accent-anthropic);
+    color: #000;
+  }
+
+  /* ===== CHAT SCREEN ===== */
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chat-messages::-webkit-scrollbar {
+    width: 2px;
+  }
+  .chat-messages::-webkit-scrollbar-thumb {
+    background: var(--surface2);
+    border-radius: 2px;
+  }
+
+  .msg {
+    margin-bottom: 6px;
+    max-width: 95%;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .msg.user {
+    margin-left: auto;
+  }
+  .msg-bubble {
+    padding: 5px 7px;
+    border-radius: var(--radius);
+    font-size: 9px;
+    line-height: 1.35;
+    word-wrap: break-word;
+  }
+  .msg.user .msg-bubble {
+    background: var(--user-bubble);
+    border-bottom-right-radius: 2px;
+  }
+  .msg.assistant .msg-bubble {
+    background: var(--surface);
+    border-bottom-left-radius: 2px;
+    border-left: 2px solid var(--accent-openai);
+  }
+  .msg.assistant.anthropic .msg-bubble {
+    border-left-color: var(--accent-anthropic);
+  }
+
+  .msg-label {
+    font-size: 7px;
+    color: var(--text-dark);
+    margin-bottom: 1px;
+    padding: 0 2px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .msg.user .msg-label {
+    text-align: right;
+  }
+
+  .typing-indicator {
+    display: inline-flex;
+    gap: 3px;
+    padding: 6px 10px;
+  }
+  .typing-dot {
+    width: 4px;
+    height: 4px;
+    background: var(--text-dim);
+    border-radius: 50%;
+    animation: typingBounce 1.2s infinite;
+  }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typingBounce {
+    0%, 80%, 100% { transform: translateY(0); }
+    40% { transform: translateY(-4px); }
+  }
+
+  /* ===== INPUT BAR ===== */
+  .input-bar {
+    display: flex;
+    padding: 4px;
+    background: var(--surface);
+    border-top: 1px solid var(--surface2);
+    gap: 3px;
+    flex-shrink: 0;
+  }
+  .input-bar input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--surface2);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 9px;
+    padding: 5px 6px;
+    outline: none;
+  }
+  .input-bar input:focus {
+    border-color: var(--accent-openai);
+  }
+  .input-bar input.anthropic-focus:focus {
+    border-color: var(--accent-anthropic);
+  }
+  .send-btn {
+    background: var(--accent-openai);
+    border: none;
+    color: #000;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 12px;
+    width: 30px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .send-btn.anthropic {
+    background: var(--accent-anthropic);
+  }
+  .send-btn:active {
+    opacity: 0.7;
+  }
+  .send-btn:disabled {
+    opacity: 0.3;
+  }
+
+  /* ===== SETTINGS SCREEN ===== */
+  .settings-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .settings-scroll::-webkit-scrollbar {
+    width: 2px;
+  }
+  .settings-scroll::-webkit-scrollbar-thumb {
+    background: var(--surface2);
+    border-radius: 2px;
+  }
+
+  .settings-group {
+    margin-bottom: 10px;
+  }
+  .settings-label {
+    font-size: 7px;
+    color: var(--text-dark);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    font-weight: 700;
+  }
+  .settings-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--surface2);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 9px;
+    padding: 6px;
+    outline: none;
+  }
+  .settings-input:focus {
+    border-color: var(--accent-openai);
+  }
+
+  .model-selector {
+    display: flex;
+    gap: 4px;
+  }
+  .model-btn {
+    flex: 1;
+    padding: 8px 4px;
+    border: 2px solid var(--surface2);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 8px;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .model-btn.selected {
+    color: #000;
+  }
+  .model-btn.openai.selected {
+    background: var(--accent-openai);
+    border-color: var(--accent-openai);
+  }
+  .model-btn.anthropic.selected {
+    background: var(--accent-anthropic);
+    border-color: var(--accent-anthropic);
+  }
+
+  .model-name-select {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--surface2);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 9px;
+    padding: 6px;
+    outline: none;
+    -webkit-appearance: none;
+  }
+
+  .save-btn {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    margin-top: 6px;
+  }
+  .save-btn.openai {
+    background: var(--accent-openai);
+    color: #000;
+  }
+  .save-btn.anthropic {
+    background: var(--accent-anthropic);
+    color: #000;
+  }
+  .save-btn:active {
+    opacity: 0.7;
+  }
+
+  .clear-btn {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #aa3333;
+    border-radius: var(--radius);
+    background: transparent;
+    color: #aa3333;
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .clear-btn:active {
+    background: #aa3333;
+    color: #fff;
+  }
+
+  /* ===== WELCOME SCREEN ===== */
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 20px;
+    text-align: center;
+  }
+  .welcome-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+  }
+  .welcome-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+  .welcome-sub {
+    font-size: 8px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    line-height: 1.4;
+  }
+  .welcome-start {
+    padding: 8px 20px;
+    border: 2px solid var(--accent-openai);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--accent-openai);
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+  }
+  .welcome-start:active {
+    background: var(--accent-openai);
+    color: #000;
+  }
+
+  /* ===== STATUS BAR ===== */
+  .status-msg {
+    font-size: 7px;
+    color: var(--text-dark);
+    text-align: center;
+    padding: 2px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .status-msg.error {
+    color: #cc4444;
+  }
+  .status-msg.success {
+    color: var(--accent-openai);
+  }
+
+  /* ===== SYSTEM PROMPT ===== */
+  .settings-textarea {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--surface2);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 9px;
+    padding: 6px;
+    outline: none;
+    resize: none;
+    height: 40px;
+  }
+  .settings-textarea:focus {
+    border-color: var(--accent-openai);
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== WELCOME SCREEN ===== -->
+<div id="welcomeScreen" class="screen active">
+  <div class="welcome">
+    <div class="welcome-icon">🤖</div>
+    <div class="welcome-title">AI CHAT</div>
+    <div class="welcome-sub">Chat mit GPT & Claude<br>direkt auf deinem R1</div>
+    <button class="welcome-start" onclick="showSettings()">⚙ SETUP</button>
+  </div>
+</div>
+
+<!-- ===== SETTINGS SCREEN ===== -->
+<div id="settingsScreen" class="screen">
+  <div class="header">
+    <button class="header-btn" onclick="showChat()" title="Zurück">◂</button>
+    <span class="header-title">SETTINGS</span>
+    <span style="width:20px"></span>
+  </div>
+  <div class="settings-scroll" id="settingsScroll">
+
+    <div class="settings-group">
+      <div class="settings-label">Anbieter</div>
+      <div class="model-selector">
+        <button class="model-btn openai" id="btnOpenAI" onclick="selectProvider('openai')">OpenAI</button>
+        <button class="model-btn anthropic" id="btnAnthropic" onclick="selectProvider('anthropic')">Claude</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Modell</div>
+      <select class="model-name-select" id="modelSelect">
+      </select>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">OpenAI API Key</div>
+      <input class="settings-input" id="openaiKey" type="password" placeholder="sk-..." autocomplete="off">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">Anthropic API Key</div>
+      <input class="settings-input" id="anthropicKey" type="password" placeholder="sk-ant-..." autocomplete="off">
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-label">System Prompt (optional)</div>
+      <textarea class="settings-textarea" id="systemPrompt" placeholder="z.B. Du bist ein hilfreicher Assistent..."></textarea>
+    </div>
+
+    <button class="save-btn openai" id="saveBtn" onclick="saveSettings()">💾 SPEICHERN</button>
+    <button class="clear-btn" onclick="clearHistory()">🗑 Chat löschen</button>
+    <button class="clear-btn" onclick="clearAll()" style="border-color:#664; color:#664; margin-top:4px;">⚠ Alles zurücksetzen</button>
+  </div>
+</div>
+
+<!-- ===== CHAT SCREEN ===== -->
+<div id="chatScreen" class="screen">
+  <div class="header">
+    <button class="header-btn" onclick="showSettings()" title="Settings">⚙</button>
+    <span class="header-title">AI CHAT</span>
+    <span class="model-indicator" id="chatModelBadge">GPT</span>
+  </div>
+  <div class="chat-messages" id="chatMessages"></div>
+  <div class="status-msg" id="statusBar"></div>
+  <div class="input-bar">
+    <input type="text" id="chatInput" placeholder="Nachricht..." autocomplete="off">
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()">▶</button>
+  </div>
+</div>
+
+<script>
+  // ===== STATE =====
+  let state = {
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    openaiKey: '',
+    anthropicKey: '',
+    systemPrompt: '',
+    messages: [],
+    setupDone: false
+  };
+
+  const MODELS = {
+    openai: [
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+      { id: 'gpt-4o', name: 'GPT-4o' },
+      { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano' },
+      { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
+      { id: 'gpt-4.1', name: 'GPT-4.1' },
+      { id: 'o4-mini', name: 'o4-mini' }
+    ],
+    anthropic: [
+      { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5' },
+      { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5' },
+      { id: 'claude-opus-4-5-20250527', name: 'Opus 4.5' }
+    ]
+  };
+
+  // ===== LOAD / SAVE =====
+  function loadState() {
+    try {
+      const saved = localStorage.getItem('r1_ai_chat');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        state = { ...state, ...parsed };
+      }
+    } catch(e) {}
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem('r1_ai_chat', JSON.stringify(state));
+    } catch(e) {}
+  }
+
+  // ===== NAVIGATION =====
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function showSettings() {
+    showScreen('settingsScreen');
+    document.getElementById('openaiKey').value = state.openaiKey;
+    document.getElementById('anthropicKey').value = state.anthropicKey;
+    document.getElementById('systemPrompt').value = state.systemPrompt;
+    selectProvider(state.provider, false);
+  }
+
+  function showChat() {
+    if (!state.setupDone) {
+      const key = state.provider === 'openai' ? state.openaiKey : state.anthropicKey;
+      if (!key) {
+        setStatus('Bitte erst API Key eingeben', true);
+        return;
+      }
+    }
+    state.setupDone = true;
+    saveState();
+    showScreen('chatScreen');
+    updateChatUI();
+    renderMessages();
+    scrollToBottom();
+    document.getElementById('chatInput').focus();
+  }
+
+  // ===== SETTINGS =====
+  function selectProvider(p, updateModel = true) {
+    state.provider = p;
+    document.getElementById('btnOpenAI').classList.toggle('selected', p === 'openai');
+    document.getElementById('btnAnthropic').classList.toggle('selected', p === 'anthropic');
+
+    const saveBtn = document.getElementById('saveBtn');
+    saveBtn.className = 'save-btn ' + p;
+
+    // Populate model dropdown
+    const sel = document.getElementById('modelSelect');
+    sel.innerHTML = '';
+    MODELS[p].forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name;
+      sel.appendChild(opt);
+    });
+
+    if (updateModel) {
+      state.model = MODELS[p][0].id;
+    }
+    sel.value = state.model;
+  }
+
+  function saveSettings() {
+    state.openaiKey = document.getElementById('openaiKey').value.trim();
+    state.anthropicKey = document.getElementById('anthropicKey').value.trim();
+    state.systemPrompt = document.getElementById('systemPrompt').value.trim();
+    state.model = document.getElementById('modelSelect').value;
+    state.setupDone = true;
+    saveState();
+    showChat();
+  }
+
+  function clearHistory() {
+    if (confirm('Chat-Verlauf löschen?')) {
+      state.messages = [];
+      saveState();
+      renderMessages();
+    }
+  }
+
+  function clearAll() {
+    if (confirm('ALLES zurücksetzen?\n(Keys, Chat, Settings)')) {
+      localStorage.removeItem('r1_ai_chat');
+      location.reload();
+    }
+  }
+
+  // ===== CHAT UI =====
+  function updateChatUI() {
+    const badge = document.getElementById('chatModelBadge');
+    const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const isAnthropic = state.provider === 'anthropic';
+
+    badge.textContent = MODELS[state.provider].find(m => m.id === state.model)?.name || state.model;
+    badge.className = 'model-indicator ' + state.provider;
+    sendBtn.className = 'send-btn' + (isAnthropic ? ' anthropic' : '');
+    input.className = isAnthropic ? 'anthropic-focus' : '';
+  }
+
+  function renderMessages() {
+    const container = document.getElementById('chatMessages');
+    container.innerHTML = '';
+
+    if (state.messages.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center;padding:40px 10px;color:var(--text-dark);">
+          <div style="font-size:20px;margin-bottom:6px;">💬</div>
+          <div style="font-size:8px;line-height:1.4;">Schreib eine Nachricht<br>oder nutze das Scroll-Wheel</div>
+        </div>`;
+      return;
+    }
+
+    state.messages.forEach(msg => {
+      const div = document.createElement('div');
+      div.className = 'msg ' + msg.role + (msg.provider === 'anthropic' ? ' anthropic' : '');
+
+      const label = document.createElement('div');
+      label.className = 'msg-label';
+      label.textContent = msg.role === 'user' ? 'Du' : (msg.provider === 'anthropic' ? '◈ Claude' : '◉ GPT');
+
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+      bubble.textContent = msg.content;
+
+      div.appendChild(label);
+      div.appendChild(bubble);
+      container.appendChild(div);
+    });
+
+    scrollToBottom();
+  }
+
+  function addTypingIndicator() {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = 'msg assistant';
+    div.id = 'typingMsg';
+    div.innerHTML = `
+      <div class="msg-label">${state.provider === 'anthropic' ? '◈ Claude' : '◉ GPT'}</div>
+      <div class="msg-bubble">
+        <div class="typing-indicator">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>`;
+    container.appendChild(div);
+    scrollToBottom();
+  }
+
+  function removeTypingIndicator() {
+    const el = document.getElementById('typingMsg');
+    if (el) el.remove();
+  }
+
+  function scrollToBottom() {
+    const container = document.getElementById('chatMessages');
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function setStatus(text, isError = false) {
+    const bar = document.getElementById('statusBar');
+    bar.textContent = text;
+    bar.className = 'status-msg' + (isError ? ' error' : ' success');
+    if (text) setTimeout(() => { bar.textContent = ''; }, 3000);
+  }
+
+  // ===== API CALLS =====
+  async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    const key = state.provider === 'openai' ? state.openaiKey : state.anthropicKey;
+    if (!key) {
+      setStatus('API Key fehlt! → Settings', true);
+      return;
+    }
+
+    // Add user message
+    state.messages.push({ role: 'user', content: text, provider: state.provider });
+    input.value = '';
+    renderMessages();
+
+    // Disable input
+    input.disabled = true;
+    document.getElementById('sendBtn').disabled = true;
+    addTypingIndicator();
+
+    try {
+      let reply;
+      if (state.provider === 'openai') {
+        reply = await callOpenAI(key, text);
+      } else {
+        reply = await callAnthropic(key, text);
+      }
+
+      removeTypingIndicator();
+      state.messages.push({ role: 'assistant', content: reply, provider: state.provider });
+      saveState();
+      renderMessages();
+
+    } catch(err) {
+      removeTypingIndicator();
+      setStatus('Fehler: ' + (err.message || 'Unbekannt'), true);
+    }
+
+    input.disabled = false;
+    document.getElementById('sendBtn').disabled = false;
+    input.focus();
+  }
+
+  async function callOpenAI(key, userMsg) {
+    const messages = [];
+    if (state.systemPrompt) {
+      messages.push({ role: 'system', content: state.systemPrompt });
+    }
+    // Include last 10 messages for context
+    const recent = state.messages.slice(-10);
+    recent.forEach(m => {
+      messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content });
+    });
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key
+      },
+      body: JSON.stringify({
+        model: state.model,
+        messages: messages,
+        max_tokens: 500,
+        temperature: 0.7
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'API Error ' + res.status);
+    }
+
+    const data = await res.json();
+    return data.choices[0].message.content.trim();
+  }
+
+  async function callAnthropic(key, userMsg) {
+    const messages = [];
+    // Include last 10 messages for context
+    const recent = state.messages.slice(-10);
+    recent.forEach(m => {
+      messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content });
+    });
+
+    const body = {
+      model: state.model,
+      messages: messages,
+      max_tokens: 500
+    };
+    if (state.systemPrompt) {
+      body.system = state.systemPrompt;
+    }
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'API Error ' + res.status);
+    }
+
+    const data = await res.json();
+    return data.content.map(c => c.text || '').join('').trim();
+  }
+
+  // ===== KEYBOARD / SCROLL WHEEL =====
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const active = document.activeElement;
+      if (active && active.id === 'chatInput') {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+  });
+
+  // Scroll wheel support for scrolling through chat & settings
+  document.addEventListener('wheel', (e) => {
+    const chatMsgs = document.getElementById('chatMessages');
+    const settingsScroll = document.getElementById('settingsScroll');
+
+    if (document.getElementById('chatScreen').classList.contains('active')) {
+      chatMsgs.scrollTop += e.deltaY > 0 ? 30 : -30;
+    } else if (document.getElementById('settingsScreen').classList.contains('active')) {
+      settingsScroll.scrollTop += e.deltaY > 0 ? 30 : -30;
+    }
+  }, { passive: true });
+
+  // ===== INIT =====
+  loadState();
+  if (state.setupDone && (state.openaiKey || state.anthropicKey)) {
+    showChat();
+  }
+</script>
+
+</body>
+</html>
