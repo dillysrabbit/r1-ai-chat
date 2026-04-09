@@ -66,6 +66,13 @@
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.5px;
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 4px;
   }
   .header-btn {
     background: none;
@@ -397,6 +404,78 @@
     color: #fff;
   }
 
+  /* ===== SESSIONS SCREEN ===== */
+  .sessions-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 5px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sessions-list::-webkit-scrollbar {
+    width: 2px;
+  }
+  .sessions-list::-webkit-scrollbar-thumb {
+    background: var(--surface2);
+    border-radius: 2px;
+  }
+  .sessions-empty {
+    text-align: center;
+    color: var(--text-dark);
+    font-size: 8px;
+    line-height: 1.5;
+    padding: 50px 10px;
+    letter-spacing: 0.3px;
+  }
+  .session-row {
+    display: flex;
+    align-items: stretch;
+    background: var(--surface);
+    border: 1px solid var(--surface2);
+    border-radius: var(--radius);
+    margin-bottom: 4px;
+    overflow: hidden;
+  }
+  .session-row.active {
+    border-color: var(--accent);
+    background: #2a2620;
+  }
+  .session-info {
+    flex: 1;
+    padding: 5px 7px;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .session-title {
+    font-size: 9px;
+    color: var(--text);
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+  .session-meta {
+    font-size: 7px;
+    color: var(--text-dim);
+    letter-spacing: 0.3px;
+  }
+  .session-delete {
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--surface2);
+    color: var(--text-dim);
+    font-size: 14px;
+    font-family: inherit;
+    width: 24px;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .session-delete:active {
+    color: #cc4444;
+    background: #2a1818;
+  }
+
   /* ===== SYSTEM PROMPT ===== */
   .settings-textarea {
     width: 100%;
@@ -442,12 +521,22 @@
   </div>
 </div>
 
+<!-- ===== SESSIONS SCREEN ===== -->
+<div id="sessionsScreen" class="screen">
+  <div class="header">
+    <button class="header-btn" onclick="showChat()" title="Zurück">◂</button>
+    <span class="header-title">SESSIONS</span>
+    <button class="header-btn" onclick="newSession()" title="Neue Session">+</button>
+  </div>
+  <div class="sessions-list" id="sessionsList"></div>
+</div>
+
 <!-- ===== CHAT SCREEN ===== -->
 <div id="chatScreen" class="screen active">
   <div class="header">
+    <button class="header-btn" onclick="showSessions()" title="Sessions">≡</button>
+    <span class="header-title" id="currentSessionTitle">NEUE SESSION</span>
     <button class="header-btn" onclick="showSettings()" title="Settings">⚙</button>
-    <span class="header-title">INTERCOM</span>
-    <span class="model-indicator" id="chatModelBadge">Claude</span>
   </div>
   <div class="chat-messages" id="chatMessages"></div>
   <div class="intercom">
@@ -465,11 +554,22 @@
   // ===== STATE =====
   // The API key no longer lives in state — it's held server-side by the
   // Vercel Edge Function in api/chat.js (ANTHROPIC_API_KEY env var).
+  //
+  // Conversations ("sessions") live server-side too, in a private
+  // GitHub repo managed by api/sessions.js. The client holds only:
+  //   - persistent UI prefs (model, systemPrompt override)
+  //   - currentSessionId (so reopening the app resumes where we were)
+  //   - in-memory copies of the currently open session and the list,
+  //     both of which are authoritative on the server.
   let state = {
     model: 'claude-sonnet-4-6',
     systemPrompt: '',
-    messages: []
+    currentSessionId: null
   };
+
+  let currentSession = { id: null, title: '', created: '', messages: [] };
+  let sessionsList = [];
+  let sessionsAvailable = true; // flips to false if /api/sessions can't be reached
 
   const STORAGE_KEY = 'r1_ai_chat';
 
@@ -504,20 +604,14 @@
       const parsed = JSON.parse(raw);
 
       // Strip legacy fields: multi-provider, client-side API keys,
-      // setup flags — nothing of that lives client-side anymore.
+      // setup flags, and the old in-state message array (messages now
+      // live server-side as GitHub-backed sessions).
       delete parsed.anthropicKey;
       delete parsed.openaiKey;
       delete parsed.apiKey;
       delete parsed.provider;
       delete parsed.setupDone;
-
-      // Strip legacy per-message provider tag
-      if (Array.isArray(parsed.messages)) {
-        parsed.messages = parsed.messages.map(m => ({
-          role: m.role,
-          content: m.content
-        }));
-      }
+      delete parsed.messages;
 
       // Coerce old/unknown model ids to default
       if (parsed.model && !MODELS.find(m => m.id === parsed.model)) {
@@ -579,25 +673,42 @@
     showChat();
   }
 
-  function clearHistory() {
-    if (confirm('Chat-Verlauf löschen?')) {
-      state.messages = [];
-      saveState();
-      renderMessages();
+  async function clearHistory() {
+    if (!confirm('Aktuelle Session löschen?')) return;
+    const id = currentSession.id;
+    // Fire-and-forget DELETE; even if the server can't be reached we
+    // still reset the local view so the Chef isn't stuck.
+    if (id && sessionsAvailable) {
+      try {
+        await fetch('/api/sessions?id=' + encodeURIComponent(id), {
+          method: 'DELETE'
+        });
+      } catch (e) {}
     }
+    newSession();
+    showChat();
   }
 
   // ===== CHAT UI =====
   function updateChatUI() {
-    const badge = document.getElementById('chatModelBadge');
-    badge.textContent = MODELS.find(m => m.id === state.model)?.name || state.model;
+    updateHeaderTitle();
+  }
+
+  function updateHeaderTitle() {
+    const el = document.getElementById('currentSessionTitle');
+    if (!el) return;
+    const t = (currentSession && currentSession.title)
+      ? currentSession.title
+      : 'NEUE SESSION';
+    el.textContent = t.length > 28 ? t.slice(0, 27) + '…' : t;
   }
 
   function renderMessages() {
     const container = document.getElementById('chatMessages');
     container.innerHTML = '';
 
-    if (state.messages.length === 0) {
+    const msgs = (currentSession && currentSession.messages) || [];
+    if (msgs.length === 0) {
       container.innerHTML = `
         <div style="text-align:center;padding:28px 10px;color:var(--text-dark);">
           <div style="font-size:8px;line-height:1.5;letter-spacing:0.5px;">
@@ -607,7 +718,7 @@
       return;
     }
 
-    state.messages.forEach(msg => {
+    msgs.forEach(msg => {
       const div = document.createElement('div');
       div.className = 'msg ' + msg.role;
 
@@ -661,7 +772,8 @@
   // Talks to our own Vercel Edge Function, which holds the API key
   // server-side and proxies the request to Anthropic with stream:true.
   async function callAnthropic(onDelta) {
-    const messages = state.messages.slice(-10).map(m => ({
+    const history = (currentSession && currentSession.messages) || [];
+    const messages = history.slice(-10).map(m => ({
       role: m.role,
       content: m.content
     }));
@@ -722,7 +834,22 @@
     const text = input.value.trim();
     if (!text) return;
 
-    state.messages.push({ role: 'user', content: text });
+    // First user message of a brand-new session: mint the session id
+    // and derive a title from the text. The id determines the filename
+    // on GitHub, so it must be unique and include the timestamp.
+    if (!currentSession.id) {
+      const now = new Date();
+      const id = dateStamp(now) + '-' + (slugify(text) || 'session');
+      currentSession.id = id;
+      currentSession.created = now.toISOString();
+      currentSession.title = text.slice(0, 60);
+      state.currentSessionId = id;
+      saveState();
+      updateHeaderTitle();
+    }
+
+    const userMsg = { role: 'user', content: text, ts: new Date().toISOString() };
+    currentSession.messages.push(userMsg);
     input.value = '';
     renderMessages();
 
@@ -735,7 +862,7 @@
     msgDiv.className = 'msg assistant';
     const label = document.createElement('div');
     label.className = 'msg-label';
-    label.textContent = '◈ Claude';
+    label.textContent = '◈ MRS. L';
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
     bubble.innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
@@ -744,6 +871,7 @@
     container.appendChild(msgDiv);
     scrollToBottom();
 
+    let replyOk = false;
     try {
       const reply = await callAnthropic((partial) => {
         bubble.textContent = partial;
@@ -752,16 +880,211 @@
       if (!reply) {
         bubble.textContent = '(leere Antwort)';
       }
-      state.messages.push({ role: 'assistant', content: reply });
-      saveState();
+      currentSession.messages.push({
+        role: 'assistant',
+        content: reply,
+        ts: new Date().toISOString()
+      });
+      replyOk = true;
     } catch(err) {
       msgDiv.remove();
+      // Roll back the user turn so we don't silently re-send it next time.
+      currentSession.messages.pop();
       setStatus('Fehler: ' + (err.message || 'Unbekannt'), { isError: true });
     }
 
     input.disabled = false;
     document.getElementById('sendBtn').disabled = false;
     input.focus();
+
+    if (replyOk) {
+      await persistCurrentSession();
+    }
+  }
+
+  // PUT the full current session to /api/sessions. If the server isn't
+  // reachable (no env vars, network down) we flip sessionsAvailable so
+  // later turns don't keep hammering it — the conversation still works
+  // in-memory, it just won't be mirrored to the Happy Place inbox.
+  async function persistCurrentSession() {
+    if (!currentSession.id) return;
+    if (!sessionsAvailable) return;
+    try {
+      const res = await fetch('/api/sessions?id=' + encodeURIComponent(currentSession.id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: currentSession.title,
+          model: state.model,
+          messages: currentSession.messages
+        })
+      });
+      if (!res.ok) throw new Error('PUT ' + res.status);
+      setStatus('Gespeichert');
+    } catch (e) {
+      sessionsAvailable = false;
+      setStatus('Inbox offline', { isError: true });
+    }
+  }
+
+  // ===== SESSIONS =====
+  function slugify(s) {
+    return (s || '')
+      .toLowerCase()
+      .replace(/[äÄ]/g, 'ae')
+      .replace(/[öÖ]/g, 'oe')
+      .replace(/[üÜ]/g, 'ue')
+      .replace(/[ß]/g, 'ss')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+  }
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function dateStamp(d) {
+    return d.getFullYear()
+      + pad2(d.getMonth() + 1)
+      + pad2(d.getDate())
+      + '-'
+      + pad2(d.getHours())
+      + pad2(d.getMinutes())
+      + pad2(d.getSeconds());
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + '. ' +
+      pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  }
+
+  function showSessions() {
+    showScreen('sessionsScreen');
+    renderSessionsList();
+    loadSessionsList();
+  }
+
+  async function loadSessionsList() {
+    try {
+      const res = await fetch('/api/sessions');
+      if (!res.ok) throw new Error('GET ' + res.status);
+      const data = await res.json();
+      sessionsList = Array.isArray(data.sessions) ? data.sessions : [];
+      sessionsAvailable = true;
+      renderSessionsList();
+    } catch (e) {
+      sessionsAvailable = false;
+      renderSessionsList();
+    }
+  }
+
+  function renderSessionsList() {
+    const container = document.getElementById('sessionsList');
+    container.innerHTML = '';
+
+    if (!sessionsAvailable) {
+      container.innerHTML = `
+        <div class="sessions-empty">
+          Inbox offline.<br>
+          Prüfen Sie GITHUB_TOKEN,<br>GITHUB_OWNER, GITHUB_REPO<br>in den Vercel-Variablen.
+        </div>`;
+      return;
+    }
+
+    if (sessionsList.length === 0) {
+      container.innerHTML = `
+        <div class="sessions-empty">
+          Noch keine Sessions.<br>
+          Tippen Sie + oben rechts<br>oder sprechen Sie einfach los.
+        </div>`;
+      return;
+    }
+
+    sessionsList.forEach(s => {
+      const row = document.createElement('div');
+      row.className = 'session-row' + (s.id === currentSession.id ? ' active' : '');
+
+      const info = document.createElement('div');
+      info.className = 'session-info';
+      info.onclick = () => openSession(s.id);
+
+      const title = document.createElement('div');
+      title.className = 'session-title';
+      title.textContent = s.title || s.id;
+
+      const meta = document.createElement('div');
+      meta.className = 'session-meta';
+      meta.textContent = formatDate(s.created);
+
+      info.appendChild(title);
+      info.appendChild(meta);
+
+      const del = document.createElement('button');
+      del.className = 'session-delete';
+      del.textContent = '×';
+      del.title = 'Löschen';
+      del.onclick = (ev) => {
+        ev.stopPropagation();
+        deleteSession(s.id);
+      };
+
+      row.appendChild(info);
+      row.appendChild(del);
+      container.appendChild(row);
+    });
+  }
+
+  async function openSession(id) {
+    if (!id) return;
+    setStatus('Lade...', { sticky: true });
+    try {
+      const res = await fetch('/api/sessions?id=' + encodeURIComponent(id));
+      if (!res.ok) throw new Error('GET ' + res.status);
+      const data = await res.json();
+      const s = data.session || {};
+      currentSession = {
+        id: s.id || id,
+        title: s.title || '',
+        created: s.created || '',
+        messages: Array.isArray(s.messages) ? s.messages : []
+      };
+      state.currentSessionId = currentSession.id;
+      saveState();
+      setStatus('');
+      showChat();
+    } catch (e) {
+      setStatus('Laden fehlgeschlagen', { isError: true });
+    }
+  }
+
+  function newSession() {
+    currentSession = { id: null, title: '', created: '', messages: [] };
+    state.currentSessionId = null;
+    saveState();
+    showChat();
+  }
+
+  async function deleteSession(id) {
+    if (!id) return;
+    if (!confirm('Diese Session endgültig löschen?')) return;
+    try {
+      const res = await fetch('/api/sessions?id=' + encodeURIComponent(id), {
+        method: 'DELETE'
+      });
+      if (!res.ok && res.status !== 404) throw new Error('DELETE ' + res.status);
+      sessionsList = sessionsList.filter(s => s.id !== id);
+      if (currentSession.id === id) {
+        currentSession = { id: null, title: '', created: '', messages: [] };
+        state.currentSessionId = null;
+        saveState();
+        updateHeaderTitle();
+      }
+      renderSessionsList();
+    } catch (e) {
+      setStatus('Löschen fehlgeschlagen', { isError: true });
+    }
   }
 
   // ===== KEYBOARD =====
@@ -777,13 +1100,13 @@
 
   // Desktop scroll-wheel fallback (local browser testing)
   document.addEventListener('wheel', (e) => {
-    const chatMsgs = document.getElementById('chatMessages');
-    const settingsScroll = document.getElementById('settingsScroll');
-
+    const delta = e.deltaY > 0 ? 30 : -30;
     if (document.getElementById('chatScreen').classList.contains('active')) {
-      chatMsgs.scrollTop += e.deltaY > 0 ? 30 : -30;
+      document.getElementById('chatMessages').scrollTop += delta;
     } else if (document.getElementById('settingsScreen').classList.contains('active')) {
-      settingsScroll.scrollTop += e.deltaY > 0 ? 30 : -30;
+      document.getElementById('settingsScroll').scrollTop += delta;
+    } else if (document.getElementById('sessionsScreen').classList.contains('active')) {
+      document.getElementById('sessionsList').scrollTop += delta;
     }
   }, { passive: true });
 
@@ -793,16 +1116,21 @@
       document.getElementById('chatMessages').scrollTop += delta;
     } else if (document.getElementById('settingsScreen').classList.contains('active')) {
       document.getElementById('settingsScroll').scrollTop += delta;
+    } else if (document.getElementById('sessionsScreen').classList.contains('active')) {
+      document.getElementById('sessionsList').scrollTop += delta;
     }
   }
   window.addEventListener('scrollUp',   () => scrollActiveScreen(-30));
   window.addEventListener('scrollDown', () => scrollActiveScreen(30));
 
-  // PTT short click -> toggle between chat and settings
+  // PTT short click: chat -> sessions -> settings -> chat.
+  // Gives the Chef a three-way carousel without the tiny header buttons.
   window.addEventListener('sideClick', () => {
     if (document.getElementById('chatScreen').classList.contains('active')) {
+      showSessions();
+    } else if (document.getElementById('sessionsScreen').classList.contains('active')) {
       showSettings();
-    } else if (document.getElementById('settingsScreen').classList.contains('active')) {
+    } else {
       showChat();
     }
   });
@@ -948,6 +1276,34 @@
   // ===== INIT =====
   (async () => {
     await loadState();
+
+    // Try to restore the last open session from the server. If the
+    // inbox isn't reachable or the file is gone, fall back to a fresh
+    // empty session — the Chef can still talk, it just won't persist.
+    if (state.currentSessionId) {
+      try {
+        const res = await fetch('/api/sessions?id=' + encodeURIComponent(state.currentSessionId));
+        if (res.ok) {
+          const data = await res.json();
+          const s = data.session || {};
+          currentSession = {
+            id: s.id || state.currentSessionId,
+            title: s.title || '',
+            created: s.created || '',
+            messages: Array.isArray(s.messages) ? s.messages : []
+          };
+        } else if (res.status === 404) {
+          // File was deleted elsewhere — start fresh.
+          state.currentSessionId = null;
+          saveState();
+        } else {
+          sessionsAvailable = false;
+        }
+      } catch (e) {
+        sessionsAvailable = false;
+      }
+    }
+
     showChat();
   })();
 </script>
