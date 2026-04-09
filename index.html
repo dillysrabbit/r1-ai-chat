@@ -401,8 +401,8 @@
   <div class="chat-messages" id="chatMessages"></div>
   <div class="status-msg" id="statusBar"></div>
   <div class="input-bar">
-    <button class="mic-btn" id="micBtn" onclick="requestVoiceInput()" title="Sprechen (oder PTT halten)">🎤</button>
-    <input type="text" id="chatInput" placeholder="🎤 oder PTT halten" autocomplete="off">
+    <button class="mic-btn" id="micBtn" onclick="toggleRecording()" title="Tippen zum Sprechen">🎤</button>
+    <input type="text" id="chatInput" placeholder="🎤 tippen zum Sprechen" autocomplete="off">
     <button class="send-btn" id="sendBtn" onclick="sendMessage()">▶</button>
   </div>
 </div>
@@ -734,20 +734,18 @@
     }
   });
 
-  // ===== VOICE INPUT (R1 PluginMessageHandler pattern) =====
-  // The R1 webview doesn't expose a soft keyboard to HTML inputs, so we
-  // delegate speech-to-text to Rabbit's own pipeline via PluginMessageHandler.
-  // We ask the Rabbit LLM to return the user's next utterance verbatim as
-  // JSON, then feed that transcription back into sendMessage() as if the
-  // user had typed it.
-  let voicePending = false;
-  let voiceTimeout = null;
-
-  function hasPluginHandler() {
-    return typeof PluginMessageHandler !== 'undefined'
-      && PluginMessageHandler
-      && typeof PluginMessageHandler.postMessage === 'function';
-  }
+  // ===== VOICE INPUT (MediaRecorder + Groq Whisper) =====
+  // The R1 webview has no soft keyboard and no working
+  // webkitSpeechRecognition, so we run our own STT pipeline:
+  //   tap mic -> getUserMedia -> MediaRecorder -> POST to /api/transcribe
+  //   -> server forwards to Groq Whisper -> JSON {text} -> sendMessage().
+  //
+  // Tap-to-toggle (not press-and-hold) because the R1's PTT hardware
+  // button holds the mic itself and would collide with getUserMedia.
+  let mediaStream = null;
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let isRecording = false;
 
   function setMicRecording(on) {
     const btn = document.getElementById('micBtn');
@@ -755,81 +753,124 @@
     btn.classList.toggle('recording', !!on);
   }
 
-  function resetVoicePending() {
-    voicePending = false;
-    if (voiceTimeout) { clearTimeout(voiceTimeout); voiceTimeout = null; }
-    setMicRecording(false);
-  }
-
-  function requestVoiceInput() {
-    if (voicePending) return;
-    if (!hasPluginHandler()) {
-      setStatus('Voice nur auf R1 - bitte PTT halten', true);
-      return;
-    }
-    voicePending = true;
-    setMicRecording(true);
-    setStatus('🎤 Sprich jetzt...');
-
-    voiceTimeout = setTimeout(() => {
-      if (!voicePending) return;
-      resetVoicePending();
-      setStatus('Keine Eingabe erkannt', true);
-    }, 20000);
-
-    try {
-      PluginMessageHandler.postMessage(JSON.stringify({
-        message: 'Transcribe the user\'s next utterance verbatim. Return ONLY JSON: {"text":"..."}. Do not answer, interpret, translate, or comment.',
-        useLLM: true,
-        wantsR1Response: false
-      }));
-    } catch (e) {
-      resetVoicePending();
-      setStatus('Plugin-Fehler: ' + (e.message || e), true);
-    }
-  }
-
-  function extractTranscription(data) {
-    if (!data) return '';
-    // Primary: data.data is a JSON string or object
-    if (data.data != null) {
-      let parsed = data.data;
-      if (typeof parsed === 'string') {
-        try { parsed = JSON.parse(parsed); }
-        catch(e) { return parsed.trim(); }
+  function pickMimeType() {
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/ogg;codecs=opus',
+      'audio/ogg',
+      'audio/mp4'
+    ];
+    if (typeof MediaRecorder === 'undefined') return '';
+    for (const t of candidates) {
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) {
+        return t;
       }
-      if (parsed && typeof parsed === 'object') {
-        return (parsed.text || parsed.answer || parsed.transcription || '').toString().trim();
-      }
-    }
-    // Fallback: data.message is plain text
-    if (typeof data.message === 'string') {
-      return data.message.trim();
     }
     return '';
   }
 
-  window.onPluginMessage = function(data) {
-    if (!voicePending) return;
-    resetVoicePending();
-
-    const text = extractTranscription(data);
-    if (!text) {
-      setStatus('Keine Eingabe erkannt', true);
+  async function startRecording() {
+    if (isRecording) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('Mikrofon nicht verfügbar', true);
+      return;
+    }
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      setStatus('Mikrofon-Zugriff verweigert', true);
       return;
     }
 
-    const input = document.getElementById('chatInput');
-    input.value = text;
-    sendMessage();
-  };
-
-  // PTT long-press also triggers voice input — hold to speak.
-  window.addEventListener('longPressStart', () => {
-    if (document.getElementById('chatScreen').classList.contains('active')) {
-      requestVoiceInput();
+    const mimeType = pickMimeType();
+    try {
+      mediaRecorder = mimeType
+        ? new MediaRecorder(mediaStream, { mimeType })
+        : new MediaRecorder(mediaStream);
+    } catch (e) {
+      stopMicStream();
+      setStatus('Recorder-Fehler: ' + (e.message || e), true);
+      return;
     }
-  });
+
+    audioChunks = [];
+    mediaRecorder.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) audioChunks.push(ev.data);
+    };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(audioChunks, {
+        type: mediaRecorder.mimeType || 'audio/webm'
+      });
+      stopMicStream();
+      transcribeAndSend(blob);
+    };
+
+    mediaRecorder.start();
+    isRecording = true;
+    setMicRecording(true);
+    setStatus('🎤 Aufnahme... nochmal tippen zum Stoppen');
+  }
+
+  function stopRecording() {
+    if (!isRecording) return;
+    isRecording = false;
+    setMicRecording(false);
+    setStatus('Transkribiere...');
+    try {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+    } catch (e) {
+      stopMicStream();
+      setStatus('Stop-Fehler: ' + (e.message || e), true);
+    }
+  }
+
+  function stopMicStream() {
+    if (mediaStream) {
+      try { mediaStream.getTracks().forEach(t => t.stop()); } catch(e) {}
+      mediaStream = null;
+    }
+  }
+
+  function toggleRecording() {
+    if (isRecording) stopRecording();
+    else startRecording();
+  }
+
+  async function transcribeAndSend(blob) {
+    if (!blob || blob.size === 0) {
+      setStatus('Leere Aufnahme', true);
+      return;
+    }
+    try {
+      const form = new FormData();
+      form.append('file', blob, 'audio.webm');
+      form.append('language', 'de');
+
+      const res = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: form
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || 'Transcribe ' + res.status);
+      }
+      const data = await res.json();
+      const text = (data.text || '').trim();
+      if (!text) {
+        setStatus('Nichts verstanden', true);
+        return;
+      }
+      const input = document.getElementById('chatInput');
+      input.value = text;
+      setStatus('');
+      sendMessage();
+    } catch (e) {
+      setStatus('STT-Fehler: ' + (e.message || e), true);
+    }
+  }
 
   // ===== INIT =====
   (async () => {
