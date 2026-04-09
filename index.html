@@ -169,75 +169,142 @@
     40% { transform: translateY(-4px); }
   }
 
-  /* ===== INPUT BAR ===== */
-  .input-bar {
-    display: flex;
-    padding: 4px;
-    background: var(--surface);
-    border-top: 1px solid var(--surface2);
-    gap: 3px;
+  /* ===== INTERCOM PANEL ===== */
+  .intercom {
     flex-shrink: 0;
+    background: linear-gradient(180deg, #2a2a2a 0%, #1c1c1c 100%);
+    border-top: 1px solid #3a3a3a;
+    padding: 5px 6px 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
   }
-  .input-bar input {
-    flex: 1;
-    background: var(--bg);
-    border: 1px solid var(--surface2);
-    border-radius: var(--radius);
-    color: var(--text);
-    font-family: inherit;
-    font-size: 9px;
-    padding: 5px 6px;
-    outline: none;
+  .intercom-grille {
+    width: 100%;
+    height: 6px;
+    background-image: radial-gradient(circle, #4a4a4a 0.8px, transparent 1.2px);
+    background-size: 4px 4px;
+    opacity: 0.75;
   }
-  .input-bar input:focus {
-    border-color: var(--accent);
-  }
-  .send-btn {
-    background: var(--accent);
-    border: none;
-    color: #000;
+  .mic-big {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 32% 30%, #f0c79a 0%, #d4a574 40%, #8a6539 100%);
+    border: 2px solid #2a2a2a;
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,0.35),
+      inset 0 -3px 5px rgba(0,0,0,0.45),
+      0 2px 5px rgba(0,0,0,0.6),
+      0 0 0 2px #1a1a1a,
+      0 0 0 3px #4a3a24;
+    color: #2a1a0a;
     font-family: inherit;
     font-weight: 700;
-    font-size: 12px;
-    width: 30px;
-    border-radius: var(--radius);
+    font-size: 10px;
+    letter-spacing: 1.5px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform 0.08s;
+    padding: 0;
+    margin: 2px 0 0;
+  }
+  .mic-big:active {
+    transform: scale(0.94);
+    box-shadow:
+      inset 0 2px 6px rgba(0,0,0,0.5),
+      0 1px 2px rgba(0,0,0,0.6),
+      0 0 0 2px #1a1a1a,
+      0 0 0 3px #4a3a24;
+  }
+  .mic-big.recording {
+    background: radial-gradient(circle at 32% 30%, #ff8080 0%, #d63030 40%, #7a1010 100%);
+    color: #fff;
+    animation: recordPulse 1.1s infinite;
+  }
+  @keyframes recordPulse {
+    0%, 100% {
+      box-shadow:
+        inset 0 2px 3px rgba(255,255,255,0.35),
+        inset 0 -3px 5px rgba(0,0,0,0.45),
+        0 2px 5px rgba(0,0,0,0.6),
+        0 0 0 2px #1a1a1a,
+        0 0 0 3px #7a1010,
+        0 0 8px rgba(255,60,60,0.55);
+    }
+    50% {
+      box-shadow:
+        inset 0 2px 3px rgba(255,255,255,0.35),
+        inset 0 -3px 5px rgba(0,0,0,0.45),
+        0 2px 5px rgba(0,0,0,0.6),
+        0 0 0 2px #1a1a1a,
+        0 0 0 3px #7a1010,
+        0 0 16px rgba(255,60,60,1);
+    }
+  }
+  .intercom-status {
+    font-size: 7px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    font-weight: 700;
+    height: 9px;
+    line-height: 9px;
+    text-align: center;
+    min-height: 9px;
+  }
+  .intercom-status.recording { color: #ff6060; }
+  .intercom-status.error     { color: #cc4444; }
+  .intercom-status.success   { color: var(--accent); }
+  .intercom-textrow {
+    display: flex;
+    width: 100%;
+    gap: 3px;
+    margin-top: 1px;
+  }
+  .intercom-textrow input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid #333;
+    border-radius: 3px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 8px;
+    padding: 3px 5px;
+    outline: none;
+    height: 18px;
+  }
+  .intercom-textrow input:focus {
+    border-color: var(--accent);
+  }
+  .intercom-textrow input:disabled {
+    opacity: 0.4;
+  }
+  .send-btn {
+    background: var(--surface2);
+    border: 1px solid #3a3a3a;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 9px;
+    width: 22px;
+    height: 18px;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
   }
   .send-btn:active {
-    opacity: 0.7;
+    background: var(--accent);
+    color: #000;
   }
   .send-btn:disabled {
     opacity: 0.3;
-  }
-  .mic-btn {
-    background: var(--surface2);
-    border: 1px solid var(--accent);
-    color: var(--accent);
-    font-family: inherit;
-    font-size: 11px;
-    width: 30px;
-    border-radius: var(--radius);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-  .mic-btn:active {
-    background: var(--accent);
-    color: #000;
-  }
-  .mic-btn.recording {
-    background: var(--accent);
-    color: #000;
-    animation: micPulse 1s infinite;
-  }
-  @keyframes micPulse {
-    0%, 100% { opacity: 1; }
-    50%      { opacity: 0.55; }
   }
 
   /* ===== SETTINGS SCREEN ===== */
@@ -330,22 +397,6 @@
     color: #fff;
   }
 
-  /* ===== STATUS BAR ===== */
-  .status-msg {
-    font-size: 7px;
-    color: var(--text-dark);
-    text-align: center;
-    padding: 2px;
-    background: var(--surface);
-    flex-shrink: 0;
-  }
-  .status-msg.error {
-    color: #cc4444;
-  }
-  .status-msg.success {
-    color: var(--accent);
-  }
-
   /* ===== SYSTEM PROMPT ===== */
   .settings-textarea {
     width: 100%;
@@ -395,15 +446,18 @@
 <div id="chatScreen" class="screen active">
   <div class="header">
     <button class="header-btn" onclick="showSettings()" title="Settings">⚙</button>
-    <span class="header-title">AI CHAT</span>
+    <span class="header-title">INTERCOM</span>
     <span class="model-indicator" id="chatModelBadge">Claude</span>
   </div>
   <div class="chat-messages" id="chatMessages"></div>
-  <div class="status-msg" id="statusBar"></div>
-  <div class="input-bar">
-    <button class="mic-btn" id="micBtn" onclick="toggleRecording()" title="Tippen zum Sprechen">🎤</button>
-    <input type="text" id="chatInput" placeholder="🎤 tippen zum Sprechen" autocomplete="off">
-    <button class="send-btn" id="sendBtn" onclick="sendMessage()">▶</button>
+  <div class="intercom">
+    <div class="intercom-grille"></div>
+    <button class="mic-big" id="micBtn" onclick="toggleRecording()" title="Tap to talk">TALK</button>
+    <div class="intercom-status" id="statusBar">BEREIT</div>
+    <div class="intercom-textrow">
+      <input type="text" id="chatInput" placeholder="Text-Fallback" autocomplete="off">
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">▶</button>
+    </div>
   </div>
 </div>
 
@@ -545,9 +599,10 @@
 
     if (state.messages.length === 0) {
       container.innerHTML = `
-        <div style="text-align:center;padding:40px 10px;color:var(--text-dark);">
-          <div style="font-size:20px;margin-bottom:6px;">💬</div>
-          <div style="font-size:8px;line-height:1.4;">Schreib eine Nachricht<br>oder nutze das Scroll-Wheel</div>
+        <div style="text-align:center;padding:28px 10px;color:var(--text-dark);">
+          <div style="font-size:8px;line-height:1.5;letter-spacing:0.5px;">
+            TALK drücken und sprechen,<br>Chef.
+          </div>
         </div>`;
       return;
     }
@@ -558,7 +613,7 @@
 
       const label = document.createElement('div');
       label.className = 'msg-label';
-      label.textContent = msg.role === 'user' ? 'Du' : '◈ Claude';
+      label.textContent = msg.role === 'user' ? 'CHEF' : '◈ MRS. L';
 
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
@@ -577,11 +632,29 @@
     container.scrollTop = container.scrollHeight;
   }
 
-  function setStatus(text, isError = false) {
+  // Intercom status line. Passing sticky:true prevents the auto-reset,
+  // which we use for RECORDING and TRANSCRIBING. Everything else auto-
+  // resets back to BEREIT after a few seconds.
+  let statusResetTimer = null;
+  function setStatus(text, opts = {}) {
+    const { isError = false, sticky = false, recording = false } = opts;
     const bar = document.getElementById('statusBar');
-    bar.textContent = text;
-    bar.className = 'status-msg' + (isError ? ' error' : ' success');
-    if (text) setTimeout(() => { bar.textContent = ''; }, 3000);
+    if (statusResetTimer) { clearTimeout(statusResetTimer); statusResetTimer = null; }
+
+    let cls = 'intercom-status';
+    if (recording)    cls += ' recording';
+    else if (isError) cls += ' error';
+    else if (text)    cls += ' success';
+
+    bar.textContent = text || 'BEREIT';
+    bar.className = cls;
+
+    if (!sticky && text) {
+      statusResetTimer = setTimeout(() => {
+        bar.textContent = 'BEREIT';
+        bar.className = 'intercom-status';
+      }, 3000);
+    }
   }
 
   // ===== API CALL (STREAMING) =====
@@ -683,7 +756,7 @@
       saveState();
     } catch(err) {
       msgDiv.remove();
-      setStatus('Fehler: ' + (err.message || 'Unbekannt'), true);
+      setStatus('Fehler: ' + (err.message || 'Unbekannt'), { isError: true });
     }
 
     input.disabled = false;
@@ -773,13 +846,13 @@
   async function startRecording() {
     if (isRecording) return;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setStatus('Mikrofon nicht verfügbar', true);
+      setStatus('Mikrofon n/a', { isError: true });
       return;
     }
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
-      setStatus('Mikrofon-Zugriff verweigert', true);
+      setStatus('Mic verweigert', { isError: true });
       return;
     }
 
@@ -790,7 +863,7 @@
         : new MediaRecorder(mediaStream);
     } catch (e) {
       stopMicStream();
-      setStatus('Recorder-Fehler: ' + (e.message || e), true);
+      setStatus('Recorder-Fehler', { isError: true });
       return;
     }
 
@@ -809,21 +882,21 @@
     mediaRecorder.start();
     isRecording = true;
     setMicRecording(true);
-    setStatus('🎤 Aufnahme... nochmal tippen zum Stoppen');
+    setStatus('REC · nochmal TALK zum Stoppen', { sticky: true, recording: true });
   }
 
   function stopRecording() {
     if (!isRecording) return;
     isRecording = false;
     setMicRecording(false);
-    setStatus('Transkribiere...');
+    setStatus('TRANSKRIBIERE...', { sticky: true });
     try {
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
       }
     } catch (e) {
       stopMicStream();
-      setStatus('Stop-Fehler: ' + (e.message || e), true);
+      setStatus('Stop-Fehler', { isError: true });
     }
   }
 
@@ -841,7 +914,7 @@
 
   async function transcribeAndSend(blob) {
     if (!blob || blob.size === 0) {
-      setStatus('Leere Aufnahme', true);
+      setStatus('Leere Aufnahme', { isError: true });
       return;
     }
     try {
@@ -860,7 +933,7 @@
       const data = await res.json();
       const text = (data.text || '').trim();
       if (!text) {
-        setStatus('Nichts verstanden', true);
+        setStatus('Nichts verstanden', { isError: true });
         return;
       }
       const input = document.getElementById('chatInput');
@@ -868,7 +941,7 @@
       setStatus('');
       sendMessage();
     } catch (e) {
-      setStatus('STT-Fehler: ' + (e.message || e), true);
+      setStatus('STT-Fehler', { isError: true });
     }
   }
 
