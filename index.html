@@ -18,8 +18,7 @@
     --bg: #1a1a1a;
     --surface: #242424;
     --surface2: #2e2e2e;
-    --accent-openai: #10a37f;
-    --accent-anthropic: #d4a574;
+    --accent: #d4a574;
     --text: #e8e8e8;
     --text-dim: #888;
     --text-dark: #555;
@@ -88,13 +87,7 @@
     border-radius: 10px;
     font-weight: 700;
     letter-spacing: 0.3px;
-  }
-  .model-indicator.openai {
-    background: var(--accent-openai);
-    color: #000;
-  }
-  .model-indicator.anthropic {
-    background: var(--accent-anthropic);
+    background: var(--accent);
     color: #000;
   }
 
@@ -132,6 +125,7 @@
     font-size: 9px;
     line-height: 1.35;
     word-wrap: break-word;
+    white-space: pre-wrap;
   }
   .msg.user .msg-bubble {
     background: var(--user-bubble);
@@ -140,10 +134,7 @@
   .msg.assistant .msg-bubble {
     background: var(--surface);
     border-bottom-left-radius: 2px;
-    border-left: 2px solid var(--accent-openai);
-  }
-  .msg.assistant.anthropic .msg-bubble {
-    border-left-color: var(--accent-anthropic);
+    border-left: 2px solid var(--accent);
   }
 
   .msg-label {
@@ -199,13 +190,10 @@
     outline: none;
   }
   .input-bar input:focus {
-    border-color: var(--accent-openai);
-  }
-  .input-bar input.anthropic-focus:focus {
-    border-color: var(--accent-anthropic);
+    border-color: var(--accent);
   }
   .send-btn {
-    background: var(--accent-openai);
+    background: var(--accent);
     border: none;
     color: #000;
     font-family: inherit;
@@ -217,9 +205,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-  .send-btn.anthropic {
-    background: var(--accent-anthropic);
   }
   .send-btn:active {
     opacity: 0.7;
@@ -266,37 +251,7 @@
     outline: none;
   }
   .settings-input:focus {
-    border-color: var(--accent-openai);
-  }
-
-  .model-selector {
-    display: flex;
-    gap: 4px;
-  }
-  .model-btn {
-    flex: 1;
-    padding: 8px 4px;
-    border: 2px solid var(--surface2);
-    border-radius: var(--radius);
-    background: var(--surface);
-    color: var(--text-dim);
-    font-family: inherit;
-    font-size: 8px;
-    font-weight: 700;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .model-btn.selected {
-    color: #000;
-  }
-  .model-btn.openai.selected {
-    background: var(--accent-openai);
-    border-color: var(--accent-openai);
-  }
-  .model-btn.anthropic.selected {
-    background: var(--accent-anthropic);
-    border-color: var(--accent-anthropic);
+    border-color: var(--accent);
   }
 
   .model-name-select {
@@ -323,13 +278,7 @@
     cursor: pointer;
     letter-spacing: 0.5px;
     margin-top: 6px;
-  }
-  .save-btn.openai {
-    background: var(--accent-openai);
-    color: #000;
-  }
-  .save-btn.anthropic {
-    background: var(--accent-anthropic);
+    background: var(--accent);
     color: #000;
   }
   .save-btn:active {
@@ -382,10 +331,10 @@
   }
   .welcome-start {
     padding: 8px 20px;
-    border: 2px solid var(--accent-openai);
+    border: 2px solid var(--accent);
     border-radius: var(--radius);
     background: transparent;
-    color: var(--accent-openai);
+    color: var(--accent);
     font-family: inherit;
     font-size: 9px;
     font-weight: 700;
@@ -393,7 +342,7 @@
     letter-spacing: 0.5px;
   }
   .welcome-start:active {
-    background: var(--accent-openai);
+    background: var(--accent);
     color: #000;
   }
 
@@ -410,7 +359,7 @@
     color: #cc4444;
   }
   .status-msg.success {
-    color: var(--accent-openai);
+    color: var(--accent);
   }
 
   /* ===== SYSTEM PROMPT ===== */
@@ -428,7 +377,7 @@
     height: 40px;
   }
   .settings-textarea:focus {
-    border-color: var(--accent-openai);
+    border-color: var(--accent);
   }
 </style>
 </head>
@@ -439,7 +388,7 @@
   <div class="welcome">
     <div class="welcome-icon">🤖</div>
     <div class="welcome-title">AI CHAT</div>
-    <div class="welcome-sub">Chat mit GPT & Claude<br>direkt auf deinem R1</div>
+    <div class="welcome-sub">Chat mit Claude<br>direkt auf deinem R1</div>
     <button class="welcome-start" onclick="showSettings()">⚙ SETUP</button>
   </div>
 </div>
@@ -454,27 +403,13 @@
   <div class="settings-scroll" id="settingsScroll">
 
     <div class="settings-group">
-      <div class="settings-label">Anbieter</div>
-      <div class="model-selector">
-        <button class="model-btn openai" id="btnOpenAI" onclick="selectProvider('openai')">OpenAI</button>
-        <button class="model-btn anthropic" id="btnAnthropic" onclick="selectProvider('anthropic')">Claude</button>
-      </div>
-    </div>
-
-    <div class="settings-group">
       <div class="settings-label">Modell</div>
-      <select class="model-name-select" id="modelSelect">
-      </select>
-    </div>
-
-    <div class="settings-group">
-      <div class="settings-label">OpenAI API Key</div>
-      <input class="settings-input" id="openaiKey" type="password" placeholder="sk-..." autocomplete="off">
+      <select class="model-name-select" id="modelSelect"></select>
     </div>
 
     <div class="settings-group">
       <div class="settings-label">Anthropic API Key</div>
-      <input class="settings-input" id="anthropicKey" type="password" placeholder="sk-ant-..." autocomplete="off">
+      <input class="settings-input" id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
     </div>
 
     <div class="settings-group">
@@ -482,7 +417,7 @@
       <textarea class="settings-textarea" id="systemPrompt" placeholder="z.B. Du bist ein hilfreicher Assistent..."></textarea>
     </div>
 
-    <button class="save-btn openai" id="saveBtn" onclick="saveSettings()">💾 SPEICHERN</button>
+    <button class="save-btn" id="saveBtn" onclick="saveSettings()">💾 SPEICHERN</button>
     <button class="clear-btn" onclick="clearHistory()">🗑 Chat löschen</button>
     <button class="clear-btn" onclick="clearAll()" style="border-color:#664; color:#664; margin-top:4px;">⚠ Alles zurücksetzen</button>
   </div>
@@ -493,7 +428,7 @@
   <div class="header">
     <button class="header-btn" onclick="showSettings()" title="Settings">⚙</button>
     <span class="header-title">AI CHAT</span>
-    <span class="model-indicator" id="chatModelBadge">GPT</span>
+    <span class="model-indicator" id="chatModelBadge">Claude</span>
   </div>
   <div class="chat-messages" id="chatMessages"></div>
   <div class="status-msg" id="statusBar"></div>
@@ -506,45 +441,88 @@
 <script>
   // ===== STATE =====
   let state = {
-    provider: 'openai',
-    model: 'gpt-4o-mini',
-    openaiKey: '',
-    anthropicKey: '',
+    model: 'claude-sonnet-4-6',
+    apiKey: '',
     systemPrompt: '',
     messages: [],
     setupDone: false
   };
 
-  const MODELS = {
-    openai: [
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-      { id: 'gpt-4o', name: 'GPT-4o' },
-      { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano' },
-      { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
-      { id: 'gpt-4.1', name: 'GPT-4.1' },
-      { id: 'o4-mini', name: 'o4-mini' }
-    ],
-    anthropic: [
-      { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5' },
-      { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5' },
-      { id: 'claude-opus-4-5-20250527', name: 'Opus 4.5' }
-    ]
-  };
+  const STORAGE_KEY = 'r1_ai_chat';
 
-  // ===== LOAD / SAVE =====
-  function loadState() {
+  const MODELS = [
+    { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5' },
+    { id: 'claude-sonnet-4-6',          name: 'Sonnet 4.6' },
+    { id: 'claude-opus-4-6',            name: 'Opus 4.6' }
+  ];
+
+  // ===== STORAGE =====
+  // Prefer window.creationStorage.plain on the R1 (survives Creation updates),
+  // fall back to localStorage for regular browser testing.
+  function hasCreationStorage() {
+    return typeof window !== 'undefined'
+      && window.creationStorage
+      && window.creationStorage.plain;
+  }
+
+  async function loadState() {
     try {
-      const saved = localStorage.getItem('r1_ai_chat');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        state = { ...state, ...parsed };
+      let raw = null;
+      if (hasCreationStorage()) {
+        const stored = await window.creationStorage.plain.getItem(STORAGE_KEY);
+        if (stored) {
+          try { raw = atob(stored); } catch(e) { raw = stored; }
+        }
+      } else {
+        raw = localStorage.getItem(STORAGE_KEY);
+      }
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+
+      // Migrate legacy multi-provider state
+      if (parsed.anthropicKey && !parsed.apiKey) {
+        parsed.apiKey = parsed.anthropicKey;
+      }
+      delete parsed.anthropicKey;
+      delete parsed.openaiKey;
+      delete parsed.provider;
+
+      // Strip legacy per-message provider tag
+      if (Array.isArray(parsed.messages)) {
+        parsed.messages = parsed.messages.map(m => ({
+          role: m.role,
+          content: m.content
+        }));
+      }
+
+      // Coerce old/unknown model ids to default
+      if (parsed.model && !MODELS.find(m => m.id === parsed.model)) {
+        parsed.model = 'claude-sonnet-4-6';
+      }
+
+      state = { ...state, ...parsed };
+    } catch(e) {}
+  }
+
+  async function saveState() {
+    try {
+      const data = JSON.stringify(state);
+      if (hasCreationStorage()) {
+        await window.creationStorage.plain.setItem(STORAGE_KEY, btoa(data));
+      } else {
+        localStorage.setItem(STORAGE_KEY, data);
       }
     } catch(e) {}
   }
 
-  function saveState() {
+  async function clearStorage() {
     try {
-      localStorage.setItem('r1_ai_chat', JSON.stringify(state));
+      if (hasCreationStorage()) {
+        await window.creationStorage.plain.removeItem(STORAGE_KEY);
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
     } catch(e) {}
   }
 
@@ -556,19 +534,15 @@
 
   function showSettings() {
     showScreen('settingsScreen');
-    document.getElementById('openaiKey').value = state.openaiKey;
-    document.getElementById('anthropicKey').value = state.anthropicKey;
+    document.getElementById('apiKey').value = state.apiKey;
     document.getElementById('systemPrompt').value = state.systemPrompt;
-    selectProvider(state.provider, false);
+    populateModelSelect();
   }
 
   function showChat() {
-    if (!state.setupDone) {
-      const key = state.provider === 'openai' ? state.openaiKey : state.anthropicKey;
-      if (!key) {
-        setStatus('Bitte erst API Key eingeben', true);
-        return;
-      }
+    if (!state.setupDone && !state.apiKey) {
+      setStatus('Bitte erst API Key eingeben', true);
+      return;
     }
     state.setupDone = true;
     saveState();
@@ -580,33 +554,20 @@
   }
 
   // ===== SETTINGS =====
-  function selectProvider(p, updateModel = true) {
-    state.provider = p;
-    document.getElementById('btnOpenAI').classList.toggle('selected', p === 'openai');
-    document.getElementById('btnAnthropic').classList.toggle('selected', p === 'anthropic');
-
-    const saveBtn = document.getElementById('saveBtn');
-    saveBtn.className = 'save-btn ' + p;
-
-    // Populate model dropdown
+  function populateModelSelect() {
     const sel = document.getElementById('modelSelect');
     sel.innerHTML = '';
-    MODELS[p].forEach(m => {
+    MODELS.forEach(m => {
       const opt = document.createElement('option');
       opt.value = m.id;
       opt.textContent = m.name;
       sel.appendChild(opt);
     });
-
-    if (updateModel) {
-      state.model = MODELS[p][0].id;
-    }
     sel.value = state.model;
   }
 
   function saveSettings() {
-    state.openaiKey = document.getElementById('openaiKey').value.trim();
-    state.anthropicKey = document.getElementById('anthropicKey').value.trim();
+    state.apiKey = document.getElementById('apiKey').value.trim();
     state.systemPrompt = document.getElementById('systemPrompt').value.trim();
     state.model = document.getElementById('modelSelect').value;
     state.setupDone = true;
@@ -622,9 +583,9 @@
     }
   }
 
-  function clearAll() {
-    if (confirm('ALLES zurücksetzen?\n(Keys, Chat, Settings)')) {
-      localStorage.removeItem('r1_ai_chat');
+  async function clearAll() {
+    if (confirm('ALLES zurücksetzen?\n(Key, Chat, Settings)')) {
+      await clearStorage();
       location.reload();
     }
   }
@@ -632,14 +593,7 @@
   // ===== CHAT UI =====
   function updateChatUI() {
     const badge = document.getElementById('chatModelBadge');
-    const input = document.getElementById('chatInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const isAnthropic = state.provider === 'anthropic';
-
-    badge.textContent = MODELS[state.provider].find(m => m.id === state.model)?.name || state.model;
-    badge.className = 'model-indicator ' + state.provider;
-    sendBtn.className = 'send-btn' + (isAnthropic ? ' anthropic' : '');
-    input.className = isAnthropic ? 'anthropic-focus' : '';
+    badge.textContent = MODELS.find(m => m.id === state.model)?.name || state.model;
   }
 
   function renderMessages() {
@@ -657,11 +611,11 @@
 
     state.messages.forEach(msg => {
       const div = document.createElement('div');
-      div.className = 'msg ' + msg.role + (msg.provider === 'anthropic' ? ' anthropic' : '');
+      div.className = 'msg ' + msg.role;
 
       const label = document.createElement('div');
       label.className = 'msg-label';
-      label.textContent = msg.role === 'user' ? 'Du' : (msg.provider === 'anthropic' ? '◈ Claude' : '◉ GPT');
+      label.textContent = msg.role === 'user' ? 'Du' : '◈ Claude';
 
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
@@ -673,29 +627,6 @@
     });
 
     scrollToBottom();
-  }
-
-  function addTypingIndicator() {
-    const container = document.getElementById('chatMessages');
-    const div = document.createElement('div');
-    div.className = 'msg assistant';
-    div.id = 'typingMsg';
-    div.innerHTML = `
-      <div class="msg-label">${state.provider === 'anthropic' ? '◈ Claude' : '◉ GPT'}</div>
-      <div class="msg-bubble">
-        <div class="typing-indicator">
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-        </div>
-      </div>`;
-    container.appendChild(div);
-    scrollToBottom();
-  }
-
-  function removeTypingIndicator() {
-    const el = document.getElementById('typingMsg');
-    if (el) el.remove();
   }
 
   function scrollToBottom() {
@@ -710,97 +641,18 @@
     if (text) setTimeout(() => { bar.textContent = ''; }, 3000);
   }
 
-  // ===== API CALLS =====
-  async function sendMessage() {
-    const input = document.getElementById('chatInput');
-    const text = input.value.trim();
-    if (!text) return;
-
-    const key = state.provider === 'openai' ? state.openaiKey : state.anthropicKey;
-    if (!key) {
-      setStatus('API Key fehlt! → Settings', true);
-      return;
-    }
-
-    // Add user message
-    state.messages.push({ role: 'user', content: text, provider: state.provider });
-    input.value = '';
-    renderMessages();
-
-    // Disable input
-    input.disabled = true;
-    document.getElementById('sendBtn').disabled = true;
-    addTypingIndicator();
-
-    try {
-      let reply;
-      if (state.provider === 'openai') {
-        reply = await callOpenAI(key, text);
-      } else {
-        reply = await callAnthropic(key, text);
-      }
-
-      removeTypingIndicator();
-      state.messages.push({ role: 'assistant', content: reply, provider: state.provider });
-      saveState();
-      renderMessages();
-
-    } catch(err) {
-      removeTypingIndicator();
-      setStatus('Fehler: ' + (err.message || 'Unbekannt'), true);
-    }
-
-    input.disabled = false;
-    document.getElementById('sendBtn').disabled = false;
-    input.focus();
-  }
-
-  async function callOpenAI(key, userMsg) {
-    const messages = [];
-    if (state.systemPrompt) {
-      messages.push({ role: 'system', content: state.systemPrompt });
-    }
-    // Include last 10 messages for context
-    const recent = state.messages.slice(-10);
-    recent.forEach(m => {
-      messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content });
-    });
-
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + key
-      },
-      body: JSON.stringify({
-        model: state.model,
-        messages: messages,
-        max_tokens: 500,
-        temperature: 0.7
-      })
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || 'API Error ' + res.status);
-    }
-
-    const data = await res.json();
-    return data.choices[0].message.content.trim();
-  }
-
-  async function callAnthropic(key, userMsg) {
-    const messages = [];
-    // Include last 10 messages for context
-    const recent = state.messages.slice(-10);
-    recent.forEach(m => {
-      messages.push({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content });
-    });
+  // ===== API CALL (STREAMING) =====
+  async function callAnthropic(key, onDelta) {
+    const messages = state.messages.slice(-10).map(m => ({
+      role: m.role,
+      content: m.content
+    }));
 
     const body = {
       model: state.model,
       messages: messages,
-      max_tokens: 500
+      max_tokens: 1024,
+      stream: true
     };
     if (state.systemPrompt) {
       body.system = state.systemPrompt;
@@ -822,11 +674,90 @@
       throw new Error(err.error?.message || 'API Error ' + res.status);
     }
 
-    const data = await res.json();
-    return data.content.map(c => c.text || '').join('').trim();
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let full = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (!payload) continue;
+        try {
+          const evt = JSON.parse(payload);
+          if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta') {
+            full += evt.delta.text;
+            onDelta(full);
+          } else if (evt.type === 'error') {
+            throw new Error(evt.error?.message || 'Stream error');
+          }
+        } catch(e) {
+          // ignore partial / unknown events
+        }
+      }
+    }
+    return full.trim();
   }
 
-  // ===== KEYBOARD / SCROLL WHEEL =====
+  async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    if (!state.apiKey) {
+      setStatus('API Key fehlt! → Settings', true);
+      return;
+    }
+
+    state.messages.push({ role: 'user', content: text });
+    input.value = '';
+    renderMessages();
+
+    input.disabled = true;
+    document.getElementById('sendBtn').disabled = true;
+
+    // Create the assistant bubble up-front so streaming can paint into it.
+    const container = document.getElementById('chatMessages');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'msg assistant';
+    const label = document.createElement('div');
+    label.className = 'msg-label';
+    label.textContent = '◈ Claude';
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
+    msgDiv.appendChild(label);
+    msgDiv.appendChild(bubble);
+    container.appendChild(msgDiv);
+    scrollToBottom();
+
+    try {
+      const reply = await callAnthropic(state.apiKey, (partial) => {
+        bubble.textContent = partial;
+        scrollToBottom();
+      });
+      if (!reply) {
+        bubble.textContent = '(leere Antwort)';
+      }
+      state.messages.push({ role: 'assistant', content: reply });
+      saveState();
+    } catch(err) {
+      msgDiv.remove();
+      setStatus('Fehler: ' + (err.message || 'Unbekannt'), true);
+    }
+
+    input.disabled = false;
+    document.getElementById('sendBtn').disabled = false;
+    input.focus();
+  }
+
+  // ===== KEYBOARD =====
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const active = document.activeElement;
@@ -837,7 +768,7 @@
     }
   });
 
-  // Scroll wheel support for scrolling through chat & settings
+  // Desktop scroll-wheel fallback (local browser testing)
   document.addEventListener('wheel', (e) => {
     const chatMsgs = document.getElementById('chatMessages');
     const settingsScroll = document.getElementById('settingsScroll');
@@ -849,11 +780,33 @@
     }
   }, { passive: true });
 
-  // ===== INIT =====
-  loadState();
-  if (state.setupDone && (state.openaiKey || state.anthropicKey)) {
-    showChat();
+  // ===== R1 HARDWARE EVENTS =====
+  function scrollActiveScreen(delta) {
+    if (document.getElementById('chatScreen').classList.contains('active')) {
+      document.getElementById('chatMessages').scrollTop += delta;
+    } else if (document.getElementById('settingsScreen').classList.contains('active')) {
+      document.getElementById('settingsScroll').scrollTop += delta;
+    }
   }
+  window.addEventListener('scrollUp',   () => scrollActiveScreen(-30));
+  window.addEventListener('scrollDown', () => scrollActiveScreen(30));
+
+  // PTT short click -> toggle between chat and settings
+  window.addEventListener('sideClick', () => {
+    if (document.getElementById('chatScreen').classList.contains('active')) {
+      showSettings();
+    } else if (document.getElementById('settingsScreen').classList.contains('active')) {
+      showChat();
+    }
+  });
+
+  // ===== INIT =====
+  (async () => {
+    await loadState();
+    if (state.setupDone && state.apiKey) {
+      showChat();
+    }
+  })();
 </script>
 
 </body>
