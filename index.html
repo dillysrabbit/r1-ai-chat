@@ -303,49 +303,6 @@
     color: #fff;
   }
 
-  /* ===== WELCOME SCREEN ===== */
-  .welcome {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    padding: 20px;
-    text-align: center;
-  }
-  .welcome-icon {
-    font-size: 32px;
-    margin-bottom: 8px;
-  }
-  .welcome-title {
-    font-size: 13px;
-    font-weight: 700;
-    margin-bottom: 4px;
-    letter-spacing: 1px;
-  }
-  .welcome-sub {
-    font-size: 8px;
-    color: var(--text-dim);
-    margin-bottom: 14px;
-    line-height: 1.4;
-  }
-  .welcome-start {
-    padding: 8px 20px;
-    border: 2px solid var(--accent);
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--accent);
-    font-family: inherit;
-    font-size: 9px;
-    font-weight: 700;
-    cursor: pointer;
-    letter-spacing: 0.5px;
-  }
-  .welcome-start:active {
-    background: var(--accent);
-    color: #000;
-  }
-
   /* ===== STATUS BAR ===== */
   .status-msg {
     font-size: 7px;
@@ -383,16 +340,6 @@
 </head>
 <body>
 
-<!-- ===== WELCOME SCREEN ===== -->
-<div id="welcomeScreen" class="screen active">
-  <div class="welcome">
-    <div class="welcome-icon">🤖</div>
-    <div class="welcome-title">AI CHAT</div>
-    <div class="welcome-sub">Chat mit Claude<br>direkt auf deinem R1</div>
-    <button class="welcome-start" onclick="showSettings()">⚙ SETUP</button>
-  </div>
-</div>
-
 <!-- ===== SETTINGS SCREEN ===== -->
 <div id="settingsScreen" class="screen">
   <div class="header">
@@ -408,23 +355,17 @@
     </div>
 
     <div class="settings-group">
-      <div class="settings-label">Anthropic API Key</div>
-      <input class="settings-input" id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off">
-    </div>
-
-    <div class="settings-group">
       <div class="settings-label">System Prompt (optional)</div>
       <textarea class="settings-textarea" id="systemPrompt" placeholder="z.B. Du bist ein hilfreicher Assistent..."></textarea>
     </div>
 
     <button class="save-btn" id="saveBtn" onclick="saveSettings()">💾 SPEICHERN</button>
     <button class="clear-btn" onclick="clearHistory()">🗑 Chat löschen</button>
-    <button class="clear-btn" onclick="clearAll()" style="border-color:#664; color:#664; margin-top:4px;">⚠ Alles zurücksetzen</button>
   </div>
 </div>
 
 <!-- ===== CHAT SCREEN ===== -->
-<div id="chatScreen" class="screen">
+<div id="chatScreen" class="screen active">
   <div class="header">
     <button class="header-btn" onclick="showSettings()" title="Settings">⚙</button>
     <span class="header-title">AI CHAT</span>
@@ -440,12 +381,12 @@
 
 <script>
   // ===== STATE =====
+  // The API key no longer lives in state — it's held server-side by the
+  // Vercel Edge Function in api/chat.js (ANTHROPIC_API_KEY env var).
   let state = {
     model: 'claude-sonnet-4-6',
-    apiKey: '',
     systemPrompt: '',
-    messages: [],
-    setupDone: false
+    messages: []
   };
 
   const STORAGE_KEY = 'r1_ai_chat';
@@ -480,13 +421,13 @@
 
       const parsed = JSON.parse(raw);
 
-      // Migrate legacy multi-provider state
-      if (parsed.anthropicKey && !parsed.apiKey) {
-        parsed.apiKey = parsed.anthropicKey;
-      }
+      // Strip legacy fields: multi-provider, client-side API keys,
+      // setup flags — nothing of that lives client-side anymore.
       delete parsed.anthropicKey;
       delete parsed.openaiKey;
+      delete parsed.apiKey;
       delete parsed.provider;
+      delete parsed.setupDone;
 
       // Strip legacy per-message provider tag
       if (Array.isArray(parsed.messages)) {
@@ -516,16 +457,6 @@
     } catch(e) {}
   }
 
-  async function clearStorage() {
-    try {
-      if (hasCreationStorage()) {
-        await window.creationStorage.plain.removeItem(STORAGE_KEY);
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    } catch(e) {}
-  }
-
   // ===== NAVIGATION =====
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -534,18 +465,11 @@
 
   function showSettings() {
     showScreen('settingsScreen');
-    document.getElementById('apiKey').value = state.apiKey;
     document.getElementById('systemPrompt').value = state.systemPrompt;
     populateModelSelect();
   }
 
   function showChat() {
-    if (!state.setupDone && !state.apiKey) {
-      setStatus('Bitte erst API Key eingeben', true);
-      return;
-    }
-    state.setupDone = true;
-    saveState();
     showScreen('chatScreen');
     updateChatUI();
     renderMessages();
@@ -567,10 +491,8 @@
   }
 
   function saveSettings() {
-    state.apiKey = document.getElementById('apiKey').value.trim();
     state.systemPrompt = document.getElementById('systemPrompt').value.trim();
     state.model = document.getElementById('modelSelect').value;
-    state.setupDone = true;
     saveState();
     showChat();
   }
@@ -580,13 +502,6 @@
       state.messages = [];
       saveState();
       renderMessages();
-    }
-  }
-
-  async function clearAll() {
-    if (confirm('ALLES zurücksetzen?\n(Key, Chat, Settings)')) {
-      await clearStorage();
-      location.reload();
     }
   }
 
@@ -642,7 +557,9 @@
   }
 
   // ===== API CALL (STREAMING) =====
-  async function callAnthropic(key, onDelta) {
+  // Talks to our own Vercel Edge Function, which holds the API key
+  // server-side and proxies the request to Anthropic with stream:true.
+  async function callAnthropic(onDelta) {
     const messages = state.messages.slice(-10).map(m => ({
       role: m.role,
       content: m.content
@@ -651,21 +568,15 @@
     const body = {
       model: state.model,
       messages: messages,
-      max_tokens: 1024,
-      stream: true
+      max_tokens: 1024
     };
     if (state.systemPrompt) {
       body.system = state.systemPrompt;
     }
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('/api/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
 
@@ -710,11 +621,6 @@
     const text = input.value.trim();
     if (!text) return;
 
-    if (!state.apiKey) {
-      setStatus('API Key fehlt! → Settings', true);
-      return;
-    }
-
     state.messages.push({ role: 'user', content: text });
     input.value = '';
     renderMessages();
@@ -738,7 +644,7 @@
     scrollToBottom();
 
     try {
-      const reply = await callAnthropic(state.apiKey, (partial) => {
+      const reply = await callAnthropic((partial) => {
         bubble.textContent = partial;
         scrollToBottom();
       });
@@ -803,9 +709,7 @@
   // ===== INIT =====
   (async () => {
     await loadState();
-    if (state.setupDone && state.apiKey) {
-      showChat();
-    }
+    showChat();
   })();
 </script>
 
