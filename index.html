@@ -330,6 +330,121 @@
   .send-btn:disabled {
     opacity: 0.3;
   }
+  .kp-open-btn {
+    background: var(--surface2);
+    border: 1px solid #3a3a3a;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 11px;
+    width: 22px;
+    height: 18px;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .kp-open-btn:active {
+    background: var(--accent);
+    color: #000;
+  }
+
+  /* ===== KEYPAD SCREEN ===== */
+  .keypad-display {
+    margin: 4px;
+    padding: 6px 8px;
+    background: var(--bg);
+    border: 1px solid var(--surface2);
+    border-radius: var(--radius);
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--text);
+    min-height: 34px;
+    max-height: 56px;
+    overflow-y: auto;
+    word-break: break-word;
+    white-space: pre-wrap;
+    flex-shrink: 0;
+  }
+  .kp-pending {
+    background: var(--accent);
+    color: #000;
+    padding: 0 1px;
+    border-radius: 2px;
+  }
+  .kp-cursor {
+    color: var(--accent);
+    animation: kpBlink 1s steps(1) infinite;
+    font-weight: 700;
+  }
+  @keyframes kpBlink {
+    50% { opacity: 0; }
+  }
+  .keypad-hint {
+    font-size: 7px;
+    color: var(--text-dark);
+    letter-spacing: 0.3px;
+    text-align: center;
+    padding: 0 4px 2px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .keypad-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 3px;
+    padding: 2px 4px 4px;
+  }
+  .kp-key {
+    background: var(--surface);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: inherit;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    gap: 1px;
+    min-height: 0;
+    min-width: 0;
+  }
+  .kp-key:active {
+    background: var(--surface2);
+    border-color: var(--accent);
+  }
+  .kp-num {
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .kp-letters {
+    font-size: 7px;
+    color: var(--text-dim);
+    letter-spacing: 0.4px;
+    line-height: 1;
+  }
+  .kp-delete {
+    font-size: 16px;
+    font-weight: 700;
+    color: #cc8888;
+  }
+  .kp-send {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .kp-send:active {
+    opacity: 0.7;
+  }
 
   /* ===== SETTINGS SCREEN ===== */
   .settings-scroll {
@@ -651,9 +766,35 @@
     <button class="mic-big" id="micBtn" type="button" title="Tippen oder Seitentaste halten">TALK</button>
     <div class="intercom-status" id="statusBar">BEREIT</div>
     <div class="intercom-textrow">
+      <button class="kp-open-btn" id="keypadBtn" type="button" title="Tastenfeld">⌨</button>
       <input type="text" id="chatInput" placeholder="Text-Fallback" autocomplete="off">
       <button class="send-btn" id="sendBtn" type="button">▶</button>
     </div>
+  </div>
+</div>
+
+<!-- ===== KEYPAD SCREEN (multitap input, like an old SMS phone) ===== -->
+<div id="keypadScreen" class="screen">
+  <div class="header">
+    <button class="header-btn" id="keypadBackBtn" type="button" title="Zurück">◂</button>
+    <span class="header-title">EINGABE</span>
+    <span style="width:20px"></span>
+  </div>
+  <div class="keypad-display" id="keypadDisplay"></div>
+  <div class="keypad-hint" id="keypadHint">Scrollrad: Cursor · Seitentaste: senden</div>
+  <div class="keypad-grid">
+    <button class="kp-key"              data-kp="1" type="button"><span class="kp-num">1</span><span class="kp-letters">. , ? !</span></button>
+    <button class="kp-key"              data-kp="2" type="button"><span class="kp-num">2</span><span class="kp-letters">a b c ä</span></button>
+    <button class="kp-key"              data-kp="3" type="button"><span class="kp-num">3</span><span class="kp-letters">d e f</span></button>
+    <button class="kp-key"              data-kp="4" type="button"><span class="kp-num">4</span><span class="kp-letters">g h i</span></button>
+    <button class="kp-key"              data-kp="5" type="button"><span class="kp-num">5</span><span class="kp-letters">j k l</span></button>
+    <button class="kp-key"              data-kp="6" type="button"><span class="kp-num">6</span><span class="kp-letters">m n o ö</span></button>
+    <button class="kp-key"              data-kp="7" type="button"><span class="kp-num">7</span><span class="kp-letters">p q r s ß</span></button>
+    <button class="kp-key"              data-kp="8" type="button"><span class="kp-num">8</span><span class="kp-letters">t u v ü</span></button>
+    <button class="kp-key"              data-kp="9" type="button"><span class="kp-num">9</span><span class="kp-letters">w x y z</span></button>
+    <button class="kp-key kp-delete"    id="kpBackspace" type="button">⌫</button>
+    <button class="kp-key"              data-kp="0" type="button"><span class="kp-num">0</span><span class="kp-letters">␣</span></button>
+    <button class="kp-key kp-send"      id="kpSend" type="button">⏎</button>
   </div>
 </div>
 
@@ -884,6 +1025,190 @@
         bar.textContent = 'BEREIT';
         bar.className = 'intercom-status';
       }, 3000);
+    }
+  }
+
+  // ===== KEYPAD (SMS-style multitap input) =====
+  // Classic Nokia-era multitap: tap "2" once for "a", twice for "b",
+  // three times for "c", four times for "ä", then wrap. Pending letter
+  // is highlighted in accent colour next to the blinking cursor; after
+  // KEYPAD_TIMEOUT_MS (or on any non-same-letter input) it commits
+  // into the buffer and the cycle resets.
+  //
+  // Hardware integration (only while the keypad screen is active):
+  //   - scroll wheel up / down      -> cursor left / right
+  //   - short side button click     -> send (if buffer non-empty) or
+  //                                     close (if empty). So the Chef
+  //                                     never has to aim for the tiny
+  //                                     ⏎ tile.
+  //   - long press                  -> blocked (no voice while typing)
+  //
+  // The engine is stateful and intentionally not reactive — re-render
+  // is triggered explicitly by every mutation.
+  const KEYPAD_CYCLES = {
+    '1': ['.', ',', '?', '!'],
+    '2': ['a', 'b', 'c', 'ä'],
+    '3': ['d', 'e', 'f'],
+    '4': ['g', 'h', 'i'],
+    '5': ['j', 'k', 'l'],
+    '6': ['m', 'n', 'o', 'ö'],
+    '7': ['p', 'q', 'r', 's', 'ß'],
+    '8': ['t', 'u', 'v', 'ü'],
+    '9': ['w', 'x', 'y', 'z']
+  };
+  const KEYPAD_TIMEOUT_MS = 900;
+
+  const keypad = {
+    buffer: '',
+    cursor: 0,
+    pending: null,   // { key, index, char } — the tentative letter
+    timer: null
+  };
+
+  function isKeypadOpen() {
+    const el = document.getElementById('keypadScreen');
+    return !!(el && el.classList.contains('active'));
+  }
+
+  function openKeypad() {
+    // Seed from whatever's already in the chat input so the Chef can
+    // continue a half-finished message instead of losing it.
+    const input = document.getElementById('chatInput');
+    keypad.buffer = (input && input.value) || '';
+    keypad.cursor = keypad.buffer.length;
+    keypad.pending = null;
+    if (keypad.timer) { clearTimeout(keypad.timer); keypad.timer = null; }
+    showScreen('keypadScreen');
+    renderKeypad();
+  }
+
+  function closeKeypad(opts) {
+    const commitBack = !opts || opts.commitBack !== false;
+    commitPendingKeypad();
+    if (keypad.timer) { clearTimeout(keypad.timer); keypad.timer = null; }
+    if (commitBack) {
+      // Write back so the chat screen's text fallback reflects it.
+      const input = document.getElementById('chatInput');
+      if (input) input.value = keypad.buffer;
+    }
+    showChat();
+  }
+
+  function commitPendingKeypad() {
+    if (!keypad.pending) return;
+    const ch = keypad.pending.char;
+    keypad.buffer =
+      keypad.buffer.slice(0, keypad.cursor) +
+      ch +
+      keypad.buffer.slice(keypad.cursor);
+    keypad.cursor += 1;
+    keypad.pending = null;
+    if (keypad.timer) { clearTimeout(keypad.timer); keypad.timer = null; }
+  }
+
+  function keypadResetTimer() {
+    if (keypad.timer) clearTimeout(keypad.timer);
+    keypad.timer = setTimeout(() => {
+      keypad.timer = null;
+      commitPendingKeypad();
+      renderKeypad();
+    }, KEYPAD_TIMEOUT_MS);
+  }
+
+  // Press a letter key (2-9 or 1 for punctuation).
+  function keypadPressLetter(key) {
+    const cycle = KEYPAD_CYCLES[key];
+    if (!cycle) return;
+    if (keypad.pending && keypad.pending.key === key) {
+      const idx = (keypad.pending.index + 1) % cycle.length;
+      keypad.pending.index = idx;
+      keypad.pending.char  = cycle[idx];
+    } else {
+      commitPendingKeypad();
+      keypad.pending = { key: key, index: 0, char: cycle[0] };
+    }
+    keypadResetTimer();
+    renderKeypad();
+  }
+
+  function keypadSpace() {
+    commitPendingKeypad();
+    keypad.buffer =
+      keypad.buffer.slice(0, keypad.cursor) +
+      ' ' +
+      keypad.buffer.slice(keypad.cursor);
+    keypad.cursor += 1;
+    renderKeypad();
+  }
+
+  function keypadBackspace() {
+    if (keypad.pending) {
+      // Still in the middle of picking a letter — just abandon it.
+      keypad.pending = null;
+      if (keypad.timer) { clearTimeout(keypad.timer); keypad.timer = null; }
+    } else if (keypad.cursor > 0) {
+      keypad.buffer =
+        keypad.buffer.slice(0, keypad.cursor - 1) +
+        keypad.buffer.slice(keypad.cursor);
+      keypad.cursor -= 1;
+    }
+    renderKeypad();
+  }
+
+  function keypadMoveCursor(delta) {
+    commitPendingKeypad();
+    const max = keypad.buffer.length;
+    keypad.cursor = Math.max(0, Math.min(max, keypad.cursor + delta));
+    renderKeypad();
+  }
+
+  function keypadSendOrClose() {
+    commitPendingKeypad();
+    const text = keypad.buffer.trim();
+    if (!text) {
+      // Nothing typed — just exit.
+      closeKeypad({ commitBack: false });
+      return;
+    }
+    const input = document.getElementById('chatInput');
+    if (input) input.value = keypad.buffer;
+    // Reset keypad state for the next invocation.
+    keypad.buffer = '';
+    keypad.cursor = 0;
+    keypad.pending = null;
+    showChat();
+    sendMessage();
+  }
+
+  // Re-render the display area. DOM node construction (never innerHTML)
+  // so user-typed content can't break out of its box.
+  function renderKeypad() {
+    const disp = document.getElementById('keypadDisplay');
+    if (!disp) return;
+    disp.textContent = '';
+
+    const before = keypad.buffer.slice(0, keypad.cursor);
+    const after  = keypad.buffer.slice(keypad.cursor);
+
+    if (before) disp.appendChild(document.createTextNode(before));
+    if (keypad.pending) {
+      const s = document.createElement('span');
+      s.className = 'kp-pending';
+      s.textContent = keypad.pending.char;
+      disp.appendChild(s);
+    }
+    const c = document.createElement('span');
+    c.className = 'kp-cursor';
+    c.textContent = '|';
+    disp.appendChild(c);
+    if (after) disp.appendChild(document.createTextNode(after));
+
+    // Placeholder when everything is empty — helps at first open.
+    if (!before && !after && !keypad.pending) {
+      const ph = document.createElement('span');
+      ph.textContent = ' sprich oder tippe…';
+      ph.style.color = 'var(--text-dark)';
+      disp.appendChild(ph);
     }
   }
 
@@ -1291,6 +1616,23 @@
       else if (e.key === 'Escape') { e.preventDefault(); _closeConfirm(false); }
       return;
     }
+    // Keypad screen has its own hotkey set so desktop devs can exercise
+    // multitap without clicking every tile.
+    if (isKeypadOpen()) {
+      if (e.key === 'Escape')      { e.preventDefault(); closeKeypad({ commitBack: false }); return; }
+      if (e.key === 'Enter')       { e.preventDefault(); keypadSendOrClose(); return; }
+      if (e.key === 'Backspace')   { e.preventDefault(); keypadBackspace();   return; }
+      if (e.key === 'ArrowLeft')   { e.preventDefault(); keypadMoveCursor(-1); return; }
+      if (e.key === 'ArrowRight')  { e.preventDefault(); keypadMoveCursor(1);  return; }
+      if (e.key === ' ')           { e.preventDefault(); keypadSpace();       return; }
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        if (e.key === '0') keypadSpace();
+        else               keypadPressLetter(e.key);
+        return;
+      }
+      return; // swallow everything else while the keypad owns input
+    }
     if (e.key === 'Enter') {
       const active = document.activeElement;
       if (active && active.id === 'chatInput') {
@@ -1306,6 +1648,7 @@
   });
   document.addEventListener('keyup', (e) => {
     if (isConfirmOpen()) return;
+    if (isKeypadOpen())  return;
     if (e.key === ' ' && !typingInField()) {
       window.dispatchEvent(new Event('longPressEnd'));
     }
@@ -1334,8 +1677,16 @@
       document.getElementById('sessionsList').scrollTop += delta;
     }
   }
-  window.addEventListener('scrollUp',   () => { if (!isConfirmOpen()) scrollActiveScreen(-30); });
-  window.addEventListener('scrollDown', () => { if (!isConfirmOpen()) scrollActiveScreen(30);  });
+  window.addEventListener('scrollUp', () => {
+    if (isConfirmOpen()) return;
+    if (isKeypadOpen())  { keypadMoveCursor(-1); return; }
+    scrollActiveScreen(-30);
+  });
+  window.addEventListener('scrollDown', () => {
+    if (isConfirmOpen()) return;
+    if (isKeypadOpen())  { keypadMoveCursor(1); return; }
+    scrollActiveScreen(30);
+  });
 
   // PTT short click: chat -> sessions -> settings -> chat.
   // Gives the Chef a three-way carousel without the tiny header buttons.
@@ -1344,12 +1695,17 @@
   //
   // While a confirm dialog is up, a short side click cancels the dialog
   // (matches Esc / backdrop behaviour) instead of switching screens.
+  // While the keypad is open, it sends the message (or closes if empty),
+  // so the Chef never has to aim for the small ⏎ tile.
   window.addEventListener('sideClick', () => {
     if (isConfirmOpen()) { _closeConfirm(false); return; }
+    if (isKeypadOpen())  { keypadSendOrClose();   return; }
     if (document.getElementById('chatScreen').classList.contains('active')) {
       showSessions();
     } else if (document.getElementById('sessionsScreen').classList.contains('active')) {
       showSettings();
+    } else if (document.getElementById('settingsScreen').classList.contains('active')) {
+      showChat();
     } else {
       showChat();
     }
@@ -1677,6 +2033,20 @@
     // Intercom
     bind('micBtn',           toggleRecording);
     bind('sendBtn',          sendMessage);
+    bind('keypadBtn',        openKeypad);
+    // Keypad screen
+    bind('keypadBackBtn',    () => closeKeypad({ commitBack: true }));
+    bind('kpBackspace',      keypadBackspace);
+    bind('kpSend',           keypadSendOrClose);
+    // The 12 letter/digit tiles share one delegated listener keyed by
+    // their data-kp attribute so we don't need twelve separate binds.
+    document.querySelectorAll('.kp-key[data-kp]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const k = btn.getAttribute('data-kp');
+        if (k === '0') keypadSpace();
+        else           keypadPressLetter(k);
+      });
+    });
   })();
 
   // ===== INIT =====
