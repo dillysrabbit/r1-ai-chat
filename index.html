@@ -587,7 +587,7 @@
 <!-- ===== SETTINGS SCREEN ===== -->
 <div id="settingsScreen" class="screen">
   <div class="header">
-    <button class="header-btn" onclick="showChat()" title="Zurück">◂</button>
+    <button class="header-btn" id="settingsBackBtn" type="button" title="Zurück">◂</button>
     <span class="header-title">SETTINGS</span>
     <span style="width:20px"></span>
   </div>
@@ -603,17 +603,17 @@
       <textarea class="settings-textarea" id="systemPrompt" placeholder="z.B. Du bist ein hilfreicher Assistent..."></textarea>
     </div>
 
-    <button class="save-btn" id="saveBtn" onclick="saveSettings()">💾 SPEICHERN</button>
-    <button class="clear-btn" onclick="clearHistory()">🗑 Chat löschen</button>
+    <button class="save-btn" id="saveBtn" type="button">💾 SPEICHERN</button>
+    <button class="clear-btn" id="clearHistoryBtn" type="button">🗑 Chat löschen</button>
   </div>
 </div>
 
 <!-- ===== SESSIONS SCREEN ===== -->
 <div id="sessionsScreen" class="screen">
   <div class="header">
-    <button class="header-btn" onclick="showChat()" title="Zurück">◂</button>
+    <button class="header-btn" id="sessionsBackBtn" type="button" title="Zurück">◂</button>
     <span class="header-title">SESSIONS</span>
-    <button class="header-btn" onclick="newSession()" title="Neue Session">+</button>
+    <button class="header-btn" id="newSessionBtn" type="button" title="Neue Session">+</button>
   </div>
   <div class="sessions-list" id="sessionsList"></div>
 </div>
@@ -621,18 +621,18 @@
 <!-- ===== CHAT SCREEN ===== -->
 <div id="chatScreen" class="screen active">
   <div class="header">
-    <button class="header-btn" onclick="showSessions()" title="Sessions">≡</button>
+    <button class="header-btn" id="openSessionsBtn" type="button" title="Sessions">≡</button>
     <span class="header-title" id="currentSessionTitle">NEUE SESSION</span>
-    <button class="header-btn" onclick="showSettings()" title="Settings">⚙</button>
+    <button class="header-btn" id="openSettingsBtn" type="button" title="Settings">⚙</button>
   </div>
   <div class="chat-messages" id="chatMessages"></div>
   <div class="intercom">
     <div class="intercom-grille"></div>
-    <button class="mic-big" id="micBtn" onclick="toggleRecording()" title="Tippen oder Seitentaste halten">TALK</button>
+    <button class="mic-big" id="micBtn" type="button" title="Tippen oder Seitentaste halten">TALK</button>
     <div class="intercom-status" id="statusBar">BEREIT</div>
     <div class="intercom-textrow">
       <input type="text" id="chatInput" placeholder="Text-Fallback" autocomplete="off">
-      <button class="send-btn" id="sendBtn" onclick="sendMessage()">▶</button>
+      <button class="send-btn" id="sendBtn" type="button">▶</button>
     </div>
   </div>
 </div>
@@ -1168,7 +1168,7 @@
 
       const info = document.createElement('div');
       info.className = 'session-info';
-      info.onclick = () => openSession(s.id);
+      info.addEventListener('click', () => openSession(s.id));
 
       const title = document.createElement('div');
       title.className = 'session-title';
@@ -1183,12 +1183,13 @@
 
       const del = document.createElement('button');
       del.className = 'session-delete';
+      del.type = 'button';
       del.textContent = '×';
       del.title = 'Löschen';
-      del.onclick = (ev) => {
+      del.addEventListener('click', (ev) => {
         ev.stopPropagation();
         deleteSession(s.id);
-      };
+      });
 
       row.appendChild(info);
       row.appendChild(del);
@@ -1604,6 +1605,32 @@
       setStatus('STT-Fehler', { isError: true });
     }
   }
+
+  // ===== BUTTON WIRING =====
+  // All button handlers live here instead of as inline onclick= attributes
+  // on the markup. Inline handlers are flagged as unreliable inside the
+  // R1's Flutter WebView (silent failures) and they also depend on the
+  // handler functions being global by accident, which makes refactoring
+  // risky. Do the wiring once at script load.
+  (function wireButtons() {
+    const bind = (id, fn) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', fn);
+    };
+    // Settings screen
+    bind('settingsBackBtn',  showChat);
+    bind('saveBtn',          saveSettings);
+    bind('clearHistoryBtn',  clearHistory);
+    // Sessions screen
+    bind('sessionsBackBtn',  showChat);
+    bind('newSessionBtn',    newSession);
+    // Chat screen header
+    bind('openSessionsBtn',  showSessions);
+    bind('openSettingsBtn',  showSettings);
+    // Intercom
+    bind('micBtn',           toggleRecording);
+    bind('sendBtn',          sendMessage);
+  })();
 
   // ===== INIT =====
   (async () => {
