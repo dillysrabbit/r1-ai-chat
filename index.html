@@ -541,7 +541,7 @@
   <div class="chat-messages" id="chatMessages"></div>
   <div class="intercom">
     <div class="intercom-grille"></div>
-    <button class="mic-big" id="micBtn" onclick="toggleRecording()" title="Tap to talk">TALK</button>
+    <button class="mic-big" id="micBtn" onclick="toggleRecording()" title="Tippen oder Seitentaste halten">TALK</button>
     <div class="intercom-status" id="statusBar">BEREIT</div>
     <div class="intercom-textrow">
       <input type="text" id="chatInput" placeholder="Text-Fallback" autocomplete="off">
@@ -1088,13 +1088,35 @@
   }
 
   // ===== KEYBOARD =====
+  // Two fallbacks here:
+  //   - Enter in the text input  -> sendMessage (unchanged)
+  //   - Space held (not in a text field) -> simulate longPressStart/End
+  //     so desktop developers can exercise the hold-to-talk path without
+  //     R1 hardware. Space in an input still types a normal space.
+  function typingInField() {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+  }
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const active = document.activeElement;
       if (active && active.id === 'chatInput') {
         e.preventDefault();
         sendMessage();
+        return;
       }
+    }
+    if (e.key === ' ' && !e.repeat && !typingInField()) {
+      e.preventDefault();
+      window.dispatchEvent(new Event('longPressStart'));
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.key === ' ' && !typingInField()) {
+      window.dispatchEvent(new Event('longPressEnd'));
     }
   });
 
@@ -1125,6 +1147,8 @@
 
   // PTT short click: chat -> sessions -> settings -> chat.
   // Gives the Chef a three-way carousel without the tiny header buttons.
+  // Note: short sideClick does NOT fire during a long press, so this does
+  // not collide with the hold-to-talk handlers below.
   window.addEventListener('sideClick', () => {
     if (document.getElementById('chatScreen').classList.contains('active')) {
       showSessions();
@@ -1135,14 +1159,110 @@
     }
   });
 
-  // ===== VOICE INPUT (MediaRecorder + Groq Whisper) =====
-  // The R1 webview has no soft keyboard and no working
-  // webkitSpeechRecognition, so we run our own STT pipeline:
-  //   tap mic -> getUserMedia -> MediaRecorder -> POST to /api/transcribe
-  //   -> server forwards to Groq Whisper -> JSON {text} -> sendMessage().
+  // ===== VOICE INPUT =====
+  // Two pipelines, picked at runtime:
   //
-  // Tap-to-toggle (not press-and-hold) because the R1's PTT hardware
-  // button holds the mic itself and would collide with getUserMedia.
+  //   1. CreationVoiceHandler (preferred on R1) — native bridge, speaks
+  //      to the built-in STT. No CDN, no tokens, no /api/transcribe call,
+  //      no getUserMedia permission prompt. Result arrives via
+  //      window.onPluginMessage ({type:'sttEnded', transcript:'...'}).
+  //
+  //   2. MediaRecorder + /api/transcribe + Groq Whisper — fallback for
+  //      desktop browsers and older R1 firmware without the bridge.
+  //
+  // Triggers (both pipelines):
+  //   - Hold side button (longPressStart/longPressEnd) — hands-free.
+  //   - Tap the TALK mic button — toggle on/off.
+  //   - Space key held on desktop — simulates long press for testing.
+  //
+  // voiceMode is the single source of truth so the two pipelines can't
+  // step on each other.
+  let voiceMode = 'idle'; // 'idle' | 'native' | 'media'
+
+  function hasCreationVoice() {
+    return typeof CreationVoiceHandler !== 'undefined'
+      && CreationVoiceHandler
+      && typeof CreationVoiceHandler.postMessage === 'function';
+  }
+
+  // ----- Native voice (CreationVoiceHandler) -----
+  // start/stop are fire-and-forget; the transcript lands in
+  // window.onPluginMessage, wired up once below.
+  function startNativeVoice(triggerHint) {
+    if (voiceMode !== 'idle') return;
+    if (!hasCreationVoice()) return;
+    voiceMode = 'native';
+    try {
+      CreationVoiceHandler.postMessage('start');
+    } catch (e) {
+      voiceMode = 'idle';
+      setStatus('Voice-Fehler', { isError: true });
+      return;
+    }
+    setMicRecording(true);
+    const msg = triggerHint === 'hold'
+      ? 'REC · loslassen zum Senden'
+      : 'REC · nochmal TALK zum Stoppen';
+    setStatus(msg, { sticky: true, recording: true });
+  }
+
+  function stopNativeVoice() {
+    if (voiceMode !== 'native') return;
+    try { CreationVoiceHandler.postMessage('stop'); } catch (e) {}
+    setMicRecording(false);
+    setStatus('TRANSKRIBIERE...', { sticky: true });
+    // voiceMode is reset to 'idle' when sttEnded arrives in onPluginMessage,
+    // OR by the safety timeout below if the bridge never answers.
+    scheduleNativeVoiceTimeout();
+  }
+
+  // If the native bridge silently drops the request we'd be stuck with
+  // voiceMode='native' forever and the mic button would be unusable.
+  // Reset after 15s so the Chef can at least try again.
+  let nativeVoiceTimeout = null;
+  function scheduleNativeVoiceTimeout() {
+    if (nativeVoiceTimeout) clearTimeout(nativeVoiceTimeout);
+    nativeVoiceTimeout = setTimeout(() => {
+      if (voiceMode === 'native') {
+        voiceMode = 'idle';
+        setMicRecording(false);
+        setStatus('Keine Antwort vom STT', { isError: true });
+      }
+    }, 15000);
+  }
+  function clearNativeVoiceTimeout() {
+    if (nativeVoiceTimeout) {
+      clearTimeout(nativeVoiceTimeout);
+      nativeVoiceTimeout = null;
+    }
+  }
+
+  // Install the plugin message sink. Preserves any previously-installed
+  // handler in case the SDK wires its own later (defensive — we don't
+  // currently use PluginMessageHandler for anything else).
+  (function installPluginMessageHandler() {
+    const prev = (typeof window.onPluginMessage === 'function')
+      ? window.onPluginMessage
+      : null;
+    window.onPluginMessage = function(data) {
+      try { if (prev) prev(data); } catch (e) {}
+      if (!data || data.type !== 'sttEnded') return;
+      clearNativeVoiceTimeout();
+      voiceMode = 'idle';
+      setMicRecording(false);
+      const transcript = (data.transcript || '').trim();
+      if (!transcript) {
+        setStatus('Nichts verstanden', { isError: true });
+        return;
+      }
+      const input = document.getElementById('chatInput');
+      if (input) input.value = transcript;
+      setStatus('');
+      sendMessage();
+    };
+  })();
+
+  // ----- MediaRecorder fallback -----
   let mediaStream = null;
   let mediaRecorder = null;
   let audioChunks = [];
@@ -1171,15 +1291,19 @@
     return '';
   }
 
-  async function startRecording() {
-    if (isRecording) return;
+  async function startRecording(triggerHint) {
+    if (voiceMode !== 'idle') return;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setStatus('Mikrofon n/a', { isError: true });
       return;
     }
+    // Claim the slot immediately so a second trigger mid-getUserMedia
+    // doesn't race us into two parallel recorders.
+    voiceMode = 'media';
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
+      voiceMode = 'idle';
       setStatus('Mic verweigert', { isError: true });
       return;
     }
@@ -1191,6 +1315,7 @@
         : new MediaRecorder(mediaStream);
     } catch (e) {
       stopMicStream();
+      voiceMode = 'idle';
       setStatus('Recorder-Fehler', { isError: true });
       return;
     }
@@ -1210,7 +1335,10 @@
     mediaRecorder.start();
     isRecording = true;
     setMicRecording(true);
-    setStatus('REC · nochmal TALK zum Stoppen', { sticky: true, recording: true });
+    const msg = triggerHint === 'hold'
+      ? 'REC · loslassen zum Senden'
+      : 'REC · nochmal TALK zum Stoppen';
+    setStatus(msg, { sticky: true, recording: true });
   }
 
   function stopRecording() {
@@ -1224,8 +1352,11 @@
       }
     } catch (e) {
       stopMicStream();
+      voiceMode = 'idle';
       setStatus('Stop-Fehler', { isError: true });
     }
+    // voiceMode is reset to 'idle' inside transcribeAndSend, either on
+    // success (before sendMessage) or in the error path.
   }
 
   function stopMicStream() {
@@ -1235,13 +1366,35 @@
     }
   }
 
+  // Tap handler on the TALK button. Prefers the native bridge if present,
+  // else uses the MediaRecorder fallback.
   function toggleRecording() {
-    if (isRecording) stopRecording();
-    else startRecording();
+    if (voiceMode === 'native') { stopNativeVoice(); return; }
+    if (voiceMode === 'media')  { stopRecording();   return; }
+    // idle -> start
+    if (hasCreationVoice()) startNativeVoice('tap');
+    else                    startRecording('tap');
   }
+
+  // Hold-to-talk: hold the R1 side button, release to send.
+  // Only active on the chat screen so a long-press on sessions/settings
+  // doesn't surprise the Chef with a recording.
+  window.addEventListener('longPressStart', () => {
+    const onChat = document.getElementById('chatScreen').classList.contains('active');
+    if (!onChat) return;
+    if (voiceMode !== 'idle') return;
+    if (hasCreationVoice()) startNativeVoice('hold');
+    else                    startRecording('hold');
+  });
+
+  window.addEventListener('longPressEnd', () => {
+    if (voiceMode === 'native') stopNativeVoice();
+    else if (voiceMode === 'media') stopRecording();
+  });
 
   async function transcribeAndSend(blob) {
     if (!blob || blob.size === 0) {
+      voiceMode = 'idle';
       setStatus('Leere Aufnahme', { isError: true });
       return;
     }
@@ -1260,6 +1413,7 @@
       }
       const data = await res.json();
       const text = (data.text || '').trim();
+      voiceMode = 'idle';
       if (!text) {
         setStatus('Nichts verstanden', { isError: true });
         return;
@@ -1269,6 +1423,7 @@
       setStatus('');
       sendMessage();
     } catch (e) {
+      voiceMode = 'idle';
       setStatus('STT-Fehler', { isError: true });
     }
   }
