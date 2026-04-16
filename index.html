@@ -968,55 +968,93 @@
   }
 
   // ===== TEXT-TO-SPEECH =====
-  // Uses the standard Web Speech API (window.speechSynthesis). We chose
-  // this over the R1's `wantsR1Response: true` flag because that flag
-  // only works with the R1's own built-in LLM — enabling it would bypass
-  // Claude entirely, which defeats the purpose of this app.
+  // We first tried the browser's window.speechSynthesis API but it
+  // doesn't fire on the R1's Flutter WebView in practice (no installed
+  // TTS engine or missing JNI bridge). Server-side TTS via ElevenLabs
+  // is the reliable path: POST text to /api/tts, get MP3 back, play it
+  // through an <audio> element.
   //
-  // speechSynthesis may not exist on every R1 firmware / WebView build;
-  // hasSpeechSynthesis() is the single gate used by the settings toggle
-  // and the speak path.
-  function hasSpeechSynthesis() {
-    return typeof window !== 'undefined'
-      && typeof window.speechSynthesis !== 'undefined'
-      && typeof window.SpeechSynthesisUtterance !== 'undefined';
-  }
+  // Requires ELEVENLABS_API_KEY in the Vercel env. If that's missing,
+  // /api/tts returns a 500 which we surface in the status bar so the
+  // Chef knows why it's silent.
+  let ttsAudio = null;    // currently playing Audio element, if any
+  let ttsAbort = null;    // AbortController for the in-flight fetch, if any
 
-  // Try to pick a German voice if one is installed; otherwise the
-  // platform default is fine.
-  function pickGermanVoice() {
-    try {
-      const voices = window.speechSynthesis.getVoices() || [];
-      return voices.find(v => /^de(-|_|$)/i.test(v.lang))
-          || voices.find(v => /deutsch|german/i.test(v.name))
-          || null;
-    } catch (e) { return null; }
-  }
-
-  function speakText(text) {
+  async function speakText(text) {
     if (!state.speakReplies) return;
-    if (!hasSpeechSynthesis()) return;
     const t = (text || '').trim();
     if (!t) return;
+    // Cancel any previous utterance — overlapping speech sounds awful
+    // on the R1's mono speaker.
+    stopSpeaking();
+
+    const controller = new AbortController();
+    ttsAbort = controller;
     try {
-      // Cancel any previous utterance — overlapping speech sounds awful
-      // on the R1's mono speaker.
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(t);
-      u.lang = 'de-DE';
-      u.rate = 1.0;
-      u.pitch = 1.0;
-      const v = pickGermanVoice();
-      if (v) u.voice = v;
-      window.speechSynthesis.speak(u);
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: t }),
+        signal: controller.signal
+      });
+      if (!res.ok) {
+        const errPayload = await res.json().catch(() => ({}));
+        const msg = (errPayload.error && errPayload.error.message) || ('TTS ' + res.status);
+        setStatus('TTS: ' + msg.toString().slice(0, 40), { isError: true });
+        return;
+      }
+      const blob = await res.blob();
+      // If the user cancelled (e.g. sent a new message) between fetch
+      // and playback, bail out quietly.
+      if (controller.signal.aborted) return;
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.preload = 'auto';
+      ttsAudio = audio;
+      const cleanup = () => {
+        try { URL.revokeObjectURL(url); } catch (e) {}
+        if (ttsAudio === audio) ttsAudio = null;
+      };
+      audio.addEventListener('ended',  cleanup);
+      audio.addEventListener('error',  cleanup);
+      // play() returns a Promise that rejects on autoplay / codec
+      // failures. Surface that, but don't throw — TTS is non-essential.
+      const p = audio.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {
+          setStatus('Audio blockiert', { isError: true });
+          cleanup();
+        });
+      }
     } catch (e) {
-      // Swallow — TTS is non-essential; the text is still on screen.
+      if (e && e.name === 'AbortError') return;
+      setStatus('TTS-Fehler', { isError: true });
+    } finally {
+      if (ttsAbort === controller) ttsAbort = null;
     }
   }
 
   function stopSpeaking() {
-    if (!hasSpeechSynthesis()) return;
-    try { window.speechSynthesis.cancel(); } catch (e) {}
+    // Abort an in-flight fetch so we don't play a response for a reply
+    // the user already cancelled.
+    if (ttsAbort) {
+      try { ttsAbort.abort(); } catch (e) {}
+      ttsAbort = null;
+    }
+    // Stop and release any active Audio element.
+    if (ttsAudio) {
+      const a = ttsAudio;
+      ttsAudio = null;
+      try { a.pause(); } catch (e) {}
+      try { a.removeAttribute('src'); a.load(); } catch (e) {}
+    }
+    // Belt-and-braces: also cancel any browser speechSynthesis run,
+    // in case a future desktop dev path ever uses it.
+    try {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    } catch (e) {}
   }
 
   // ===== CONFIRM DIALOG =====
