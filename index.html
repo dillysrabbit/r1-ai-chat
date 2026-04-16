@@ -421,6 +421,25 @@
     color: #fff;
   }
 
+  .exit-btn {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--surface2);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+  }
+  .exit-btn:active {
+    background: var(--surface2);
+    color: var(--text);
+  }
+
   /* ===== SESSIONS SCREEN ===== */
   .sessions-list {
     flex: 1;
@@ -660,6 +679,7 @@
 
     <button class="save-btn" id="saveBtn" type="button">💾 SPEICHERN</button>
     <button class="clear-btn" id="clearHistoryBtn" type="button">🗑 Chat löschen</button>
+    <button class="exit-btn" id="exitAppBtn" type="button">✕ Beenden</button>
   </div>
 </div>
 
@@ -1740,6 +1760,33 @@
     }
   }
 
+  // ===== EXIT =====
+  // The R1 exposes `closeWebView` as a native bridge that returns to the
+  // home screen. Calling it from a browser does nothing (the global is
+  // undefined), so we also try window.close() as a desktop nicety and
+  // surface a status message if neither works.
+  function hasCloseWebView() {
+    return typeof closeWebView !== 'undefined'
+      && closeWebView
+      && typeof closeWebView.postMessage === 'function';
+  }
+
+  function exitApp() {
+    // Stop any in-flight audio / recording before leaving so we don't
+    // leak a hot mic or talkative Mrs. L into the R1's home screen.
+    stopSpeaking();
+    if (voiceMode === 'native')      stopNativeVoice();
+    else if (voiceMode === 'media')  stopRecording();
+
+    if (hasCloseWebView()) {
+      try { closeWebView.postMessage(''); return; } catch (e) {}
+    }
+    try { window.close(); } catch (e) {}
+    // If we're still here (desktop browser won't close a tab it didn't
+    // open), at least acknowledge the tap.
+    setStatus('Kein Exit-Bridge', { isError: true });
+  }
+
   // ===== BUTTON WIRING =====
   // All button handlers live here instead of as inline onclick= attributes
   // on the markup. Inline handlers are flagged as unreliable inside the
@@ -1755,6 +1802,7 @@
     bind('settingsBackBtn',  showChat);
     bind('saveBtn',          saveSettings);
     bind('clearHistoryBtn',  clearHistory);
+    bind('exitAppBtn',       exitApp);
     // Sessions screen
     bind('sessionsBackBtn',  showChat);
     bind('newSessionBtn',    newSession);
