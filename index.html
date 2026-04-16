@@ -544,11 +544,19 @@
     cursor: pointer;
     user-select: none;
   }
+  /* The real checkbox is visually hidden but keeps accessibility +
+     keyboard focus behaviour. We draw the box on a sibling span so
+     the ::after checkmark works on WebViews that don't support
+     pseudo-elements on <input> (which counts as a replaced element
+     in some engines, even with appearance:none). */
   .settings-toggle input[type="checkbox"] {
-    /* Hide native checkbox visuals but keep the element for the click
-       target; we draw our own indicator via the :checked pseudo. */
-    appearance: none;
-    -webkit-appearance: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .settings-toggle .toggle-box {
     width: 14px;
     height: 14px;
     border: 1px solid var(--text-dim);
@@ -556,13 +564,14 @@
     background: var(--bg);
     position: relative;
     flex-shrink: 0;
-    cursor: pointer;
+    display: inline-block;
+    transition: background 0.12s, border-color 0.12s;
   }
-  .settings-toggle input[type="checkbox"]:checked {
+  .settings-toggle input[type="checkbox"]:checked + .toggle-box {
     background: var(--accent);
     border-color: var(--accent);
   }
-  .settings-toggle input[type="checkbox"]:checked::after {
+  .settings-toggle input[type="checkbox"]:checked + .toggle-box::after {
     content: '';
     position: absolute;
     left: 4px;
@@ -673,6 +682,7 @@
     <div class="settings-group" id="speakRepliesGroup">
       <label class="settings-toggle" for="speakRepliesCb">
         <input type="checkbox" id="speakRepliesCb">
+        <span class="toggle-box" aria-hidden="true"></span>
         <span>🔊 Antworten vorlesen</span>
       </label>
     </div>
@@ -817,14 +827,16 @@
     showScreen('settingsScreen');
     document.getElementById('systemPrompt').value = state.systemPrompt;
     populateModelSelect();
-    // Reflect speakReplies state. If the platform has no TTS we mark the
-    // whole row disabled so nobody toggles a switch that does nothing.
+    // Reflect speakReplies state. We used to disable the toggle when the
+    // platform looked like it lacked speechSynthesis, but that was too
+    // strict — the R1 webview may expose the API only after voices load
+    // async, and feature-sniffing at settings-open time gave false
+    // negatives. speakText() already no-ops silently if the API really
+    // isn't there, so let the Chef toggle freely.
     const cb = document.getElementById('speakRepliesCb');
-    const group = document.getElementById('speakRepliesGroup');
-    const available = hasSpeechSynthesis();
-    cb.checked  = !!state.speakReplies && available;
-    cb.disabled = !available;
-    group.classList.toggle('disabled', !available);
+    cb.checked  = !!state.speakReplies;
+    cb.disabled = false;
+    document.getElementById('speakRepliesGroup').classList.remove('disabled');
   }
 
   function showChat() {
