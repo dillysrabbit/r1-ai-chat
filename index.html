@@ -530,63 +530,6 @@
     border-color: var(--accent);
   }
 
-  .settings-toggle {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    background: var(--surface);
-    border: 1px solid var(--surface2);
-    border-radius: var(--radius);
-    padding: 7px 8px;
-    font-size: 9px;
-    letter-spacing: 0.3px;
-    color: var(--text);
-    cursor: pointer;
-    user-select: none;
-  }
-  /* The real checkbox is visually hidden but keeps accessibility +
-     keyboard focus behaviour. We draw the box on a sibling span so
-     the ::after checkmark works on WebViews that don't support
-     pseudo-elements on <input> (which counts as a replaced element
-     in some engines, even with appearance:none). */
-  .settings-toggle input[type="checkbox"] {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
-  }
-  .settings-toggle .toggle-box {
-    width: 14px;
-    height: 14px;
-    border: 1px solid var(--text-dim);
-    border-radius: 3px;
-    background: var(--bg);
-    position: relative;
-    flex-shrink: 0;
-    display: inline-block;
-    transition: background 0.12s, border-color 0.12s;
-  }
-  .settings-toggle input[type="checkbox"]:checked + .toggle-box {
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-  .settings-toggle input[type="checkbox"]:checked + .toggle-box::after {
-    content: '';
-    position: absolute;
-    left: 4px;
-    top: 1px;
-    width: 4px;
-    height: 8px;
-    border: solid #000;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-  }
-  .settings-toggle.disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
   /* ===== CONFIRM DIALOG ===== */
   /* Covers the whole 240x282 stage and sits above every screen.
      Native confirm() is unreliable in the R1's Flutter WebView, so we
@@ -679,14 +622,6 @@
       <textarea class="settings-textarea" id="systemPrompt" placeholder="z.B. Du bist ein hilfreicher Assistent..."></textarea>
     </div>
 
-    <div class="settings-group" id="speakRepliesGroup">
-      <label class="settings-toggle" for="speakRepliesCb">
-        <input type="checkbox" id="speakRepliesCb">
-        <span class="toggle-box" aria-hidden="true"></span>
-        <span>🔊 Antworten vorlesen</span>
-      </label>
-    </div>
-
     <button class="save-btn" id="saveBtn" type="button">💾 SPEICHERN</button>
     <button class="clear-btn" id="clearHistoryBtn" type="button">🗑 Chat löschen</button>
     <button class="exit-btn" id="exitAppBtn" type="button">✕ Beenden</button>
@@ -747,8 +682,7 @@
   let state = {
     model: 'claude-sonnet-4-6',
     systemPrompt: '',
-    currentSessionId: null,
-    speakReplies: false
+    currentSessionId: null
   };
 
   let currentSession = { id: null, title: '', created: '', messages: [] };
@@ -827,16 +761,6 @@
     showScreen('settingsScreen');
     document.getElementById('systemPrompt').value = state.systemPrompt;
     populateModelSelect();
-    // Reflect speakReplies state. We used to disable the toggle when the
-    // platform looked like it lacked speechSynthesis, but that was too
-    // strict — the R1 webview may expose the API only after voices load
-    // async, and feature-sniffing at settings-open time gave false
-    // negatives. speakText() already no-ops silently if the API really
-    // isn't there, so let the Chef toggle freely.
-    const cb = document.getElementById('speakRepliesCb');
-    cb.checked  = !!state.speakReplies;
-    cb.disabled = false;
-    document.getElementById('speakRepliesGroup').classList.remove('disabled');
   }
 
   function showChat() {
@@ -863,9 +787,6 @@
   function saveSettings() {
     state.systemPrompt = document.getElementById('systemPrompt').value.trim();
     state.model = document.getElementById('modelSelect').value;
-    state.speakReplies = !!document.getElementById('speakRepliesCb').checked;
-    // If the user turned speech off, silence any reply mid-sentence.
-    if (!state.speakReplies) stopSpeaking();
     saveState();
     showChat();
   }
@@ -873,7 +794,6 @@
   async function clearHistory() {
     const ok = await appConfirm('Aktuelle Session löschen?');
     if (!ok) return;
-    stopSpeaking();
     const id = currentSession.id;
     // Fire-and-forget DELETE; even if the server can't be reached we
     // still reset the local view so the Chef isn't stuck.
@@ -965,96 +885,6 @@
         bar.className = 'intercom-status';
       }, 3000);
     }
-  }
-
-  // ===== TEXT-TO-SPEECH =====
-  // We first tried the browser's window.speechSynthesis API but it
-  // doesn't fire on the R1's Flutter WebView in practice (no installed
-  // TTS engine or missing JNI bridge). Server-side TTS via ElevenLabs
-  // is the reliable path: POST text to /api/tts, get MP3 back, play it
-  // through an <audio> element.
-  //
-  // Requires ELEVENLABS_API_KEY in the Vercel env. If that's missing,
-  // /api/tts returns a 500 which we surface in the status bar so the
-  // Chef knows why it's silent.
-  let ttsAudio = null;    // currently playing Audio element, if any
-  let ttsAbort = null;    // AbortController for the in-flight fetch, if any
-
-  async function speakText(text) {
-    if (!state.speakReplies) return;
-    const t = (text || '').trim();
-    if (!t) return;
-    // Cancel any previous utterance — overlapping speech sounds awful
-    // on the R1's mono speaker.
-    stopSpeaking();
-
-    const controller = new AbortController();
-    ttsAbort = controller;
-    try {
-      const res = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: t }),
-        signal: controller.signal
-      });
-      if (!res.ok) {
-        const errPayload = await res.json().catch(() => ({}));
-        const msg = (errPayload.error && errPayload.error.message) || ('TTS ' + res.status);
-        setStatus('TTS: ' + msg.toString().slice(0, 40), { isError: true });
-        return;
-      }
-      const blob = await res.blob();
-      // If the user cancelled (e.g. sent a new message) between fetch
-      // and playback, bail out quietly.
-      if (controller.signal.aborted) return;
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.preload = 'auto';
-      ttsAudio = audio;
-      const cleanup = () => {
-        try { URL.revokeObjectURL(url); } catch (e) {}
-        if (ttsAudio === audio) ttsAudio = null;
-      };
-      audio.addEventListener('ended',  cleanup);
-      audio.addEventListener('error',  cleanup);
-      // play() returns a Promise that rejects on autoplay / codec
-      // failures. Surface that, but don't throw — TTS is non-essential.
-      const p = audio.play();
-      if (p && typeof p.catch === 'function') {
-        p.catch(() => {
-          setStatus('Audio blockiert', { isError: true });
-          cleanup();
-        });
-      }
-    } catch (e) {
-      if (e && e.name === 'AbortError') return;
-      setStatus('TTS-Fehler', { isError: true });
-    } finally {
-      if (ttsAbort === controller) ttsAbort = null;
-    }
-  }
-
-  function stopSpeaking() {
-    // Abort an in-flight fetch so we don't play a response for a reply
-    // the user already cancelled.
-    if (ttsAbort) {
-      try { ttsAbort.abort(); } catch (e) {}
-      ttsAbort = null;
-    }
-    // Stop and release any active Audio element.
-    if (ttsAudio) {
-      const a = ttsAudio;
-      ttsAudio = null;
-      try { a.pause(); } catch (e) {}
-      try { a.removeAttribute('src'); a.load(); } catch (e) {}
-    }
-    // Belt-and-braces: also cancel any browser speechSynthesis run,
-    // in case a future desktop dev path ever uses it.
-    try {
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-    } catch (e) {}
   }
 
   // ===== CONFIRM DIALOG =====
@@ -1183,9 +1013,6 @@
     const input = document.getElementById('chatInput');
     const text = input.value.trim();
     if (!text) return;
-    // If Mrs. L is still reading out the previous reply, cut her off
-    // so the next answer doesn't overlap with it.
-    stopSpeaking();
 
     // First user message of a brand-new session: mint the session id
     // and derive a title from the text. The id determines the filename
@@ -1225,7 +1052,6 @@
     scrollToBottom();
 
     let replyOk = false;
-    let spokenReply = '';
     try {
       const reply = await callAnthropic((partial) => {
         bubble.textContent = partial;
@@ -1239,7 +1065,6 @@
         content: reply,
         ts: new Date().toISOString()
       });
-      spokenReply = reply;
       replyOk = true;
     } catch(err) {
       msgDiv.remove();
@@ -1253,9 +1078,6 @@
     input.focus();
 
     if (replyOk) {
-      // Fire the utterance before awaiting the persist call so speech
-      // starts as soon as possible; cancel any earlier utterance first.
-      if (state.speakReplies && spokenReply) speakText(spokenReply);
       await persistCurrentSession();
     }
   }
@@ -1397,7 +1219,6 @@
 
   async function openSession(id) {
     if (!id) return;
-    stopSpeaking();
     setStatus('Lade...', { sticky: true });
     try {
       const res = await fetch('/api/sessions?id=' + encodeURIComponent(id));
@@ -1420,7 +1241,6 @@
   }
 
   function newSession() {
-    stopSpeaking();
     currentSession = { id: null, title: '', created: '', messages: [] };
     state.currentSessionId = null;
     saveState();
@@ -1567,8 +1387,6 @@
   function startNativeVoice(triggerHint) {
     if (voiceMode !== 'idle') return;
     if (!hasCreationVoice()) return;
-    // Cut off any in-flight TTS so it doesn't leak into the mic.
-    stopSpeaking();
     voiceMode = 'native';
     try {
       CreationVoiceHandler.postMessage('start');
@@ -1675,8 +1493,6 @@
       setStatus('Mikrofon n/a', { isError: true });
       return;
     }
-    // Cut off any in-flight TTS so it doesn't leak into the mic.
-    stopSpeaking();
     // Claim the slot immediately so a second trigger mid-getUserMedia
     // doesn't race us into two parallel recorders.
     voiceMode = 'media';
@@ -1822,9 +1638,8 @@
   }
 
   function exitApp() {
-    // Stop any in-flight audio / recording before leaving so we don't
-    // leak a hot mic or talkative Mrs. L into the R1's home screen.
-    stopSpeaking();
+    // Stop any active recording before leaving so we don't leak a hot
+    // mic into the R1's home screen.
     if (voiceMode === 'native')      stopNativeVoice();
     else if (voiceMode === 'media')  stopRecording();
 
