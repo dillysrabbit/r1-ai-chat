@@ -511,6 +511,54 @@
     border-color: var(--accent);
   }
 
+  .settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--surface);
+    border: 1px solid var(--surface2);
+    border-radius: var(--radius);
+    padding: 7px 8px;
+    font-size: 9px;
+    letter-spacing: 0.3px;
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+  }
+  .settings-toggle input[type="checkbox"] {
+    /* Hide native checkbox visuals but keep the element for the click
+       target; we draw our own indicator via the :checked pseudo. */
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--text-dim);
+    border-radius: 3px;
+    background: var(--bg);
+    position: relative;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .settings-toggle input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .settings-toggle input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid #000;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .settings-toggle.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
   /* ===== CONFIRM DIALOG ===== */
   /* Covers the whole 240x282 stage and sits above every screen.
      Native confirm() is unreliable in the R1's Flutter WebView, so we
@@ -603,6 +651,13 @@
       <textarea class="settings-textarea" id="systemPrompt" placeholder="z.B. Du bist ein hilfreicher Assistent..."></textarea>
     </div>
 
+    <div class="settings-group" id="speakRepliesGroup">
+      <label class="settings-toggle" for="speakRepliesCb">
+        <input type="checkbox" id="speakRepliesCb">
+        <span>🔊 Antworten vorlesen</span>
+      </label>
+    </div>
+
     <button class="save-btn" id="saveBtn" type="button">💾 SPEICHERN</button>
     <button class="clear-btn" id="clearHistoryBtn" type="button">🗑 Chat löschen</button>
   </div>
@@ -662,7 +717,8 @@
   let state = {
     model: 'claude-sonnet-4-6',
     systemPrompt: '',
-    currentSessionId: null
+    currentSessionId: null,
+    speakReplies: false
   };
 
   let currentSession = { id: null, title: '', created: '', messages: [] };
@@ -741,6 +797,14 @@
     showScreen('settingsScreen');
     document.getElementById('systemPrompt').value = state.systemPrompt;
     populateModelSelect();
+    // Reflect speakReplies state. If the platform has no TTS we mark the
+    // whole row disabled so nobody toggles a switch that does nothing.
+    const cb = document.getElementById('speakRepliesCb');
+    const group = document.getElementById('speakRepliesGroup');
+    const available = hasSpeechSynthesis();
+    cb.checked  = !!state.speakReplies && available;
+    cb.disabled = !available;
+    group.classList.toggle('disabled', !available);
   }
 
   function showChat() {
@@ -767,6 +831,9 @@
   function saveSettings() {
     state.systemPrompt = document.getElementById('systemPrompt').value.trim();
     state.model = document.getElementById('modelSelect').value;
+    state.speakReplies = !!document.getElementById('speakRepliesCb').checked;
+    // If the user turned speech off, silence any reply mid-sentence.
+    if (!state.speakReplies) stopSpeaking();
     saveState();
     showChat();
   }
@@ -774,6 +841,7 @@
   async function clearHistory() {
     const ok = await appConfirm('Aktuelle Session löschen?');
     if (!ok) return;
+    stopSpeaking();
     const id = currentSession.id;
     // Fire-and-forget DELETE; even if the server can't be reached we
     // still reset the local view so the Chef isn't stuck.
@@ -865,6 +933,58 @@
         bar.className = 'intercom-status';
       }, 3000);
     }
+  }
+
+  // ===== TEXT-TO-SPEECH =====
+  // Uses the standard Web Speech API (window.speechSynthesis). We chose
+  // this over the R1's `wantsR1Response: true` flag because that flag
+  // only works with the R1's own built-in LLM — enabling it would bypass
+  // Claude entirely, which defeats the purpose of this app.
+  //
+  // speechSynthesis may not exist on every R1 firmware / WebView build;
+  // hasSpeechSynthesis() is the single gate used by the settings toggle
+  // and the speak path.
+  function hasSpeechSynthesis() {
+    return typeof window !== 'undefined'
+      && typeof window.speechSynthesis !== 'undefined'
+      && typeof window.SpeechSynthesisUtterance !== 'undefined';
+  }
+
+  // Try to pick a German voice if one is installed; otherwise the
+  // platform default is fine.
+  function pickGermanVoice() {
+    try {
+      const voices = window.speechSynthesis.getVoices() || [];
+      return voices.find(v => /^de(-|_|$)/i.test(v.lang))
+          || voices.find(v => /deutsch|german/i.test(v.name))
+          || null;
+    } catch (e) { return null; }
+  }
+
+  function speakText(text) {
+    if (!state.speakReplies) return;
+    if (!hasSpeechSynthesis()) return;
+    const t = (text || '').trim();
+    if (!t) return;
+    try {
+      // Cancel any previous utterance — overlapping speech sounds awful
+      // on the R1's mono speaker.
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = 'de-DE';
+      u.rate = 1.0;
+      u.pitch = 1.0;
+      const v = pickGermanVoice();
+      if (v) u.voice = v;
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      // Swallow — TTS is non-essential; the text is still on screen.
+    }
+  }
+
+  function stopSpeaking() {
+    if (!hasSpeechSynthesis()) return;
+    try { window.speechSynthesis.cancel(); } catch (e) {}
   }
 
   // ===== CONFIRM DIALOG =====
@@ -993,6 +1113,9 @@
     const input = document.getElementById('chatInput');
     const text = input.value.trim();
     if (!text) return;
+    // If Mrs. L is still reading out the previous reply, cut her off
+    // so the next answer doesn't overlap with it.
+    stopSpeaking();
 
     // First user message of a brand-new session: mint the session id
     // and derive a title from the text. The id determines the filename
@@ -1032,6 +1155,7 @@
     scrollToBottom();
 
     let replyOk = false;
+    let spokenReply = '';
     try {
       const reply = await callAnthropic((partial) => {
         bubble.textContent = partial;
@@ -1045,6 +1169,7 @@
         content: reply,
         ts: new Date().toISOString()
       });
+      spokenReply = reply;
       replyOk = true;
     } catch(err) {
       msgDiv.remove();
@@ -1058,6 +1183,9 @@
     input.focus();
 
     if (replyOk) {
+      // Fire the utterance before awaiting the persist call so speech
+      // starts as soon as possible; cancel any earlier utterance first.
+      if (state.speakReplies && spokenReply) speakText(spokenReply);
       await persistCurrentSession();
     }
   }
@@ -1199,6 +1327,7 @@
 
   async function openSession(id) {
     if (!id) return;
+    stopSpeaking();
     setStatus('Lade...', { sticky: true });
     try {
       const res = await fetch('/api/sessions?id=' + encodeURIComponent(id));
@@ -1221,6 +1350,7 @@
   }
 
   function newSession() {
+    stopSpeaking();
     currentSession = { id: null, title: '', created: '', messages: [] };
     state.currentSessionId = null;
     saveState();
@@ -1367,6 +1497,8 @@
   function startNativeVoice(triggerHint) {
     if (voiceMode !== 'idle') return;
     if (!hasCreationVoice()) return;
+    // Cut off any in-flight TTS so it doesn't leak into the mic.
+    stopSpeaking();
     voiceMode = 'native';
     try {
       CreationVoiceHandler.postMessage('start');
@@ -1473,6 +1605,8 @@
       setStatus('Mikrofon n/a', { isError: true });
       return;
     }
+    // Cut off any in-flight TTS so it doesn't leak into the mic.
+    stopSpeaking();
     // Claim the slot immediately so a second trigger mid-getUserMedia
     // doesn't race us into two parallel recorders.
     voiceMode = 'media';
